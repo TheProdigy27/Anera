@@ -37,9 +37,19 @@ public:
 	UArenaHealthComponent* GetHealthComponent() const { return HealthComponent; }
 	UArenaAttackComponent* GetAttackComponent() const { return AttackComponent; }
 
+	// Distance à plat entre un point et les murs du bâtiment (0 si le point est dedans).
+	float GetDistanceToWalls(const FVector& Point) const;
+
+	// Point visé par les projectiles.
+	FVector GetAimPoint() const;
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
+	// Rayon approximatif du bâtiment autour de son slot, en attendant de lire ses meshes (1.4).
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Batiment", meta = (ClampMin = "0", Units = "cm"))
+	float FallbackRadius = 120.f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Arene|Batiment")
 	TObjectPtr<UArenaHealthComponent> HealthComponent;
 

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "ArenaTypes.h"
 #include "ArenaGameMode.generated.h"
 
 class AArenaAIOpponent;
@@ -26,10 +27,16 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	// Point d'entrée unique pour jouer une carte, appelé par ServerPlayCard (joueur humain)
-	// ou directement par l'IA. Vérifie élixir, main et zone, puis fait apparaître unités ou sort (1.2.4).
+	// ou directement par l'IA. Vérifie partie, main, élixir et zone, puis fait apparaître unités ou sort.
 	bool TryPlayCard(AArenaPlayerState* Player, UArenaCardData* Card, const FVector& Location);
 
 protected:
+	// Fait apparaître les unités de la carte autour de Location (au sol), en formation si elles sont plusieurs.
+	void SpawnUnits(UArenaCardData* Card, EArenaTeam Team, const FVector& Location);
+
+	// Applique l'effet d'un sort (dégâts, ralentissement) une fois le délai écoulé.
+	void ResolveSpell(UArenaCardData* Card, EArenaTeam Team, FVector Location);
+
 	// Lance la partie dès qu'il y a assez de joueurs : 1 en solo (sans réseau), 2 en réseau.
 	void TryStartMatch();
 	void StartMatch();

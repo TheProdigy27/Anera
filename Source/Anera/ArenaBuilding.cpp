@@ -36,6 +36,16 @@ void AArenaBuilding::InitializeBuilding(FName InGroup, EArenaBuildingType InType
 	AttackComponent->SetStats(bIsFort ? FortAttack : TowerAttack);
 }
 
+float AArenaBuilding::GetDistanceToWalls(const FVector& Point) const
+{
+	return FMath::Max(0.f, static_cast<float>(FVector::Dist2D(Point, GetActorLocation())) - FallbackRadius);
+}
+
+FVector AArenaBuilding::GetAimPoint() const
+{
+	return GetActorLocation() + FVector(0.f, 0.f, 150.f);
+}
+
 void AArenaBuilding::OnRep_BuildingState()
 {
 }

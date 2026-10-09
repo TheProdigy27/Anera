@@ -51,7 +51,7 @@ Règle : tout état de jeu est modifié sur le serveur. Les clients ne font qu'e
 - [x] **1.2.1** Créer les classes ci-dessus (squelettes compilables), puis des Blueprints enfants : `BP_ArenaGameMode`, `BP_ArenaPlayerController`, etc. Régler le GameMode du niveau dans World Settings.
 - [x] **1.2.2 Élixir** : maximum 10, départ à 5, +1 toutes les 2,8 s, ×2 pendant la dernière minute et les prolongations. Calculé sur le serveur, répliqué dans le PlayerState.
 - [x] **1.2.3 Deck et main** : un deck de 8 cartes mélangé, 4 en main et 1 « suivante ». Quand une carte est jouée, la suivante entre en main et la carte jouée retourne sous la pile.
-- [ ] **1.2.4 Placement** : glisser une carte sur le terrain fait un trace sous la souris et affiche une prévisualisation. Le placement est valide si le point est dans la `ZONE_Deploiement` de son équipe et sur la NavMesh (les sorts peuvent viser partout). `ServerPlayCard` revérifie l'élixir et la zone, puis fait apparaître l'unité ou les unités avec un délai d'apparition de 1 s.
+- [x] **1.2.4 Placement** : glisser une carte sur le terrain fait un trace sous la souris et affiche une prévisualisation. Le placement est valide si le point est dans la `ZONE_Deploiement` de son équipe et sur la NavMesh (les sorts peuvent viser partout). `ServerPlayCard` revérifie l'élixir et la zone, puis fait apparaître l'unité ou les unités avec un délai d'apparition de 1 s.
 - [ ] **1.2.5 Unités** :
   - Ciblage : l'ennemi le plus proche dans un rayon de vision (6 m), en respectant le type de cible de l'unité. Une unité « Bâtiments uniquement » ignore les unités.
   - Sans cible, l'unité suit les `CHEMIN_IA_<équipe>_<voie>` de sa voie. La voie est choisie selon le côté du terrain où elle a été posée.

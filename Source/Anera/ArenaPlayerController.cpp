@@ -2,11 +2,17 @@
 #include "Anera.h"
 #include "ArenaCardData.h"
 #include "ArenaGameMode.h"
+#include "ArenaLevel.h"
 #include "ArenaPlayerState.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
@@ -20,22 +26,172 @@ AArenaPlayerController::AArenaPlayerController()
 {
 	// C'est nous qui choisissons la caméra de vue : Unreal ne doit pas la remplacer automatiquement.
 	bAutoManageActiveCameraTarget = false;
+	// On vise le terrain avec la souris : le curseur reste visible.
+	bShowMouseCursor = true;
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	PreviewMesh = CylinderMesh.Object;
+	PreviewMaterial = ShapeMaterial.Object;
+}
+
+void AArenaPlayerController::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (IsLocalController())
+	{
+		// Les clics vont au jeu, et la souris n'est ni capturée ni cachée.
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		SetInputMode(InputMode);
+	}
 }
 
 void AArenaPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 
-	// PlayerTick ne tourne que sur la machine du joueur local : chacun gère sa propre caméra.
+	// PlayerTick ne tourne que sur la machine du joueur local : chacun gère sa propre caméra et sa prévisualisation.
 	UpdateArenaCamera();
+	HandleCardInput();
+	UpdatePlacementPreview();
 }
 
 void AArenaPlayerController::ServerPlayCard_Implementation(UArenaCardData* Card, FVector_NetQuantize Location)
 {
 	if (AArenaGameMode* GameMode = GetWorld()->GetAuthGameMode<AArenaGameMode>())
 	{
-		GameMode->TryPlayCard(GetPlayerState<AArenaPlayerState>(), Card, Location);
+		GameMode->TryPlayCard(GetArenaPlayerState(), Card, Location);
 	}
+}
+
+void AArenaPlayerController::SelectHandSlot(int32 HandIndex)
+{
+	const AArenaPlayerState* State = GetArenaPlayerState();
+	if (!State || !State->GetHand().IsValidIndex(HandIndex) || HandIndex == SelectedHandSlot)
+	{
+		CancelCardSelection();
+		return;
+	}
+	SelectedHandSlot = HandIndex;
+}
+
+void AArenaPlayerController::CancelCardSelection()
+{
+	SelectedHandSlot = INDEX_NONE;
+}
+
+void AArenaPlayerController::ConfirmCardPlacement()
+{
+	UArenaCardData* Card = nullptr;
+	FVector CursorLocation;
+	const AArenaPlayerState* State = GetArenaPlayerState();
+	if (!State || !GetCardUnderCursor(Card, CursorLocation))
+	{
+		return;
+	}
+	FVector GroundLocation;
+	if (State->GetElixir() < Card->ElixirCost || !ArenaLevel::IsValidPlacement(this, State->GetTeam(), Card, CursorLocation, GroundLocation))
+	{
+		return;
+	}
+	ServerPlayCard(Card, CursorLocation);
+	CancelCardSelection();
+}
+
+void AArenaPlayerController::HandleCardInput()
+{
+	static const FKey SlotKeys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four };
+	for (int32 Index = 0; Index < UE_ARRAY_COUNT(SlotKeys); ++Index)
+	{
+		if (WasInputKeyJustPressed(SlotKeys[Index]))
+		{
+			SelectHandSlot(Index);
+		}
+	}
+	if (WasInputKeyJustPressed(EKeys::RightMouseButton) || WasInputKeyJustPressed(EKeys::Escape))
+	{
+		CancelCardSelection();
+	}
+	if (WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	{
+		ConfirmCardPlacement();
+	}
+}
+
+bool AArenaPlayerController::GetCardUnderCursor(UArenaCardData*& OutCard, FVector& OutCursorLocation) const
+{
+	const AArenaPlayerState* State = GetArenaPlayerState();
+	const TArray<UArenaCardData*> Hand = State ? State->GetHand() : TArray<UArenaCardData*>();
+	if (!Hand.IsValidIndex(SelectedHandSlot) || !Hand[SelectedHandSlot])
+	{
+		return false;
+	}
+
+	// Seul le décor statique compte (sol marchable, murs, bâtiments) : on ne vise pas à travers les unités.
+	const TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes = { UEngineTypes::ConvertToObjectType(ECC_WorldStatic) };
+	FHitResult Hit;
+	if (!GetHitResultUnderCursorForObjects(ObjectTypes, false, Hit))
+	{
+		return false;
+	}
+	OutCard = Hand[SelectedHandSlot];
+	OutCursorLocation = Hit.Location;
+	return true;
+}
+
+void AArenaPlayerController::UpdatePlacementPreview()
+{
+	UArenaCardData* Card = nullptr;
+	FVector CursorLocation;
+	const AArenaPlayerState* State = GetArenaPlayerState();
+	if (!State || !GetCardUnderCursor(Card, CursorLocation))
+	{
+		if (PreviewActor)
+		{
+			PreviewActor->SetActorHiddenInGame(true);
+		}
+		return;
+	}
+
+	if (!PreviewActor)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.ObjectFlags |= RF_Transient;
+		PreviewActor = GetWorld()->SpawnActor<AStaticMeshActor>(CursorLocation, FRotator::ZeroRotator, SpawnParams);
+		if (!PreviewActor)
+		{
+			return;
+		}
+		PreviewActor->SetReplicates(false);
+		PreviewActor->SetActorEnableCollision(false);
+		UStaticMeshComponent* MeshComponent = PreviewActor->GetStaticMeshComponent();
+		MeshComponent->SetMobility(EComponentMobility::Movable);
+		MeshComponent->SetStaticMesh(PreviewMesh);
+		MeshComponent->SetCastShadow(false);
+		PreviewMaterialInstance = MeshComponent->CreateDynamicMaterialInstance(0, PreviewMaterial);
+	}
+
+	FVector GroundLocation = CursorLocation;
+	const bool bValid = State->GetElixir() >= Card->ElixirCost
+		&& ArenaLevel::IsValidPlacement(this, State->GetTeam(), Card, CursorLocation, GroundLocation);
+
+	// Disque plat : rayon du sort, ou place occupée par les unités.
+	const float Radius = Card->CardType == EArenaCardType::Spell ? Card->SpellRadius : (Card->UnitCount > 1 ? 90.f : 50.f);
+	PreviewActor->SetActorLocation(GroundLocation + FVector(0.f, 0.f, 3.f));
+	PreviewActor->SetActorScale3D(FVector(Radius / 50.f, Radius / 50.f, 0.04f));
+	PreviewActor->SetActorHiddenInGame(false);
+	if (PreviewMaterialInstance)
+	{
+		PreviewMaterialInstance->SetVectorParameterValue(TEXT("Color"), bValid ? ValidPreviewColor : InvalidPreviewColor);
+	}
+}
+
+AArenaPlayerState* AArenaPlayerController::GetArenaPlayerState() const
+{
+	return GetPlayerState<AArenaPlayerState>();
 }
 
 void AArenaPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -44,6 +200,11 @@ void AArenaPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		ArenaCamera->Destroy();
 		ArenaCamera = nullptr;
+	}
+	if (PreviewActor)
+	{
+		PreviewActor->Destroy();
+		PreviewActor = nullptr;
 	}
 	Super::EndPlay(EndPlayReason);
 }

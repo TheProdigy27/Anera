@@ -3,10 +3,14 @@
 #include "ArenaAIOpponent.h"
 #include "ArenaBuilding.h"
 #include "ArenaCardData.h"
+#include "ArenaCombat.h"
 #include "ArenaGameState.h"
+#include "ArenaLevel.h"
 #include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
+#include "ArenaUnit.h"
 #include "Engine/World.h"
+#include "TimerManager.h"
 
 AArenaGameMode::AArenaGameMode()
 {
@@ -142,7 +146,96 @@ TArray<UArenaCardData*> AArenaGameMode::GetDeckFor(const AArenaPlayerState* Play
 
 bool AArenaGameMode::TryPlayCard(AArenaPlayerState* Player, UArenaCardData* Card, const FVector& Location)
 {
-	UE_LOG(LogArene, Warning, TEXT("TryPlayCard(%s, %s, %s) : pose des cartes pas encore implementee (1.2.4)."),
-		*GetNameSafe(Player), *GetNameSafe(Card), *Location.ToCompactString());
-	return false;
+	// Le client n'est jamais cru sur parole : tout est revérifié ici.
+	auto Reject = [&](const TCHAR* Reason)
+	{
+		UE_LOG(LogArene, Log, TEXT("Carte %s refusee pour %s : %s"), *GetNameSafe(Card), *GetNameSafe(Player), Reason);
+		return false;
+	};
+
+	const AArenaGameState* ArenaGameState = GetArenaGameState();
+	if (!Player || !Card)
+	{
+		return Reject(TEXT("joueur ou carte invalide"));
+	}
+	if (!ArenaGameState || !ArenaGameState->IsMatchRunning())
+	{
+		return Reject(TEXT("la partie n'est pas en cours"));
+	}
+	const int32 HandIndex = Player->FindCardInHand(Card);
+	if (HandIndex == INDEX_NONE)
+	{
+		return Reject(TEXT("la carte n'est pas dans la main"));
+	}
+	if (Player->GetElixir() < Card->ElixirCost)
+	{
+		return Reject(TEXT("pas assez d'elixir"));
+	}
+	FVector GroundLocation;
+	if (!ArenaLevel::IsValidPlacement(this, Player->GetTeam(), Card, Location, GroundLocation))
+	{
+		return Reject(TEXT("emplacement hors de la zone de deploiement ou de la NavMesh"));
+	}
+
+	Player->SpendElixir(Card->ElixirCost);
+	Player->CycleCard(HandIndex);
+
+	if (Card->CardType == EArenaCardType::Unit)
+	{
+		SpawnUnits(Card, Player->GetTeam(), GroundLocation);
+	}
+	else
+	{
+		FTimerHandle SpellTimer;
+		GetWorldTimerManager().SetTimer(SpellTimer,
+			FTimerDelegate::CreateUObject(this, &AArenaGameMode::ResolveSpell, Card, Player->GetTeam(), GroundLocation),
+			FMath::Max(DeployDelay, KINDA_SMALL_NUMBER), false);
+	}
+
+	UE_LOG(LogArene, Log, TEXT("%s joue %s en %s (elixir restant %.1f)"),
+		*Player->GetPlayerName(), *Card->DisplayName.ToString(), *GroundLocation.ToCompactString(), Player->GetElixir());
+	return true;
+}
+
+void AArenaGameMode::SpawnUnits(UArenaCardData* Card, EArenaTeam Team, const FVector& Location)
+{
+	const TSubclassOf<AArenaUnit> UnitClass = Card->UnitClass ? Card->UnitClass : TSubclassOf<AArenaUnit>(AArenaUnit::StaticClass());
+	const float SpawnHeight = UnitClass->GetDefaultObject<AArenaUnit>()->GetSpawnHeight(Card->bFlying);
+	const FRotator Facing = ArenaLevel::GetAttackDirection(this, Team).Rotation();
+
+	// Plusieurs unités : réparties sur un petit cercle autour du point visé.
+	const int32 Count = FMath::Max(1, Card->UnitCount);
+	const float FormationRadius = Count > 1 ? 40.f + 10.f * Count : 0.f;
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const FVector Offset = FRotator(0.f, Facing.Yaw + 45.f + 360.f * Index / Count, 0.f).RotateVector(FVector(FormationRadius, 0.f, 0.f));
+		FVector Ground = Location + Offset;
+		if (!Card->bFlying && !ArenaLevel::ProjectToNavMesh(this, Ground, Ground))
+		{
+			Ground = Location;
+		}
+
+		const FTransform SpawnTransform(Facing, Ground + FVector(0.f, 0.f, SpawnHeight));
+		// Apparition « différée » : on règle l'unité avant que son BeginPlay ne s'exécute.
+		AArenaUnit* Unit = GetWorld()->SpawnActorDeferred<AArenaUnit>(UnitClass, SpawnTransform, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+		if (Unit)
+		{
+			Unit->InitializeUnit(Card, Team, DeployDelay);
+			Unit->FinishSpawning(SpawnTransform);
+		}
+	}
+}
+
+void AArenaGameMode::ResolveSpell(UArenaCardData* Card, EArenaTeam Team, FVector Location)
+{
+	const AArenaGameState* ArenaGameState = GetArenaGameState();
+	if (!Card || !ArenaGameState || !ArenaGameState->IsMatchRunning())
+	{
+		return;
+	}
+	ArenaCombat::ApplyAreaDamage(GetWorld(), Location, Card->SpellRadius, Card->SpellDamage, Team,
+		EArenaTargetType::GroundAndAir, Card->BuildingDamageScale, nullptr);
+	ArenaCombat::ApplyAreaSlow(GetWorld(), Location, Card->SpellRadius, Team, Card->SlowAmount, Card->EffectDuration);
+	UE_LOG(LogArene, Log, TEXT("Sort %s en %s"), *Card->DisplayName.ToString(), *Location.ToCompactString());
 }
