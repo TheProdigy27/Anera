@@ -2,12 +2,15 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "Engine/NetSerialization.h"
 #include "ArenaTypes.h"
 #include "ArenaPlayerController.generated.h"
 
 class ACameraActor;
+class UArenaCardData;
 
-// Contrôleur du joueur. Pour l'instant : la caméra de l'arène (la pose des cartes arrive en phase 1).
+// Contrôleur du joueur : la caméra de l'arène et l'envoi des cartes jouées au serveur
+// (sélection, glisser-déposer et prévisualisation arrivent en 1.2.4).
 //
 // La caméra reprend l'orientation de Camera_Arene (trouvée par son tag « camera »), tournée de 180°
 // pour le camp A, puis se place pour que les zones de déploiement et les bâtiments tiennent dans
@@ -21,6 +24,11 @@ public:
 	AArenaPlayerController();
 
 	virtual void PlayerTick(float DeltaTime) override;
+
+	// RPC « Server » : appelée sur la machine du joueur, exécutée sur le serveur, qui revérifie tout.
+	// Le client n'envoie qu'une intention ; Reliable garantit qu'elle arrive.
+	UFUNCTION(Server, Reliable)
+	void ServerPlayCard(UArenaCardData* Card, FVector_NetQuantize Location);
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

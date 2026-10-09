@@ -1,5 +1,7 @@
 #include "ArenaPlayerController.h"
 #include "Anera.h"
+#include "ArenaCardData.h"
+#include "ArenaGameMode.h"
 #include "ArenaPlayerState.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -26,6 +28,14 @@ void AArenaPlayerController::PlayerTick(float DeltaTime)
 
 	// PlayerTick ne tourne que sur la machine du joueur local : chacun gère sa propre caméra.
 	UpdateArenaCamera();
+}
+
+void AArenaPlayerController::ServerPlayCard_Implementation(UArenaCardData* Card, FVector_NetQuantize Location)
+{
+	if (AArenaGameMode* GameMode = GetWorld()->GetAuthGameMode<AArenaGameMode>())
+	{
+		GameMode->TryPlayCard(GetPlayerState<AArenaPlayerState>(), Card, Location);
+	}
 }
 
 void AArenaPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)

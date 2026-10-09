@@ -48,7 +48,7 @@ Objectif : une partie jouable en solo contre une IA basique, avec des cubes et c
 Règle : tout état de jeu est modifié sur le serveur. Les clients ne font qu'envoyer des intentions par RPC Server et affichent l'état répliqué.
 
 ### 1.2 Tâches
-- [ ] **1.2.1** Créer les classes ci-dessus (squelettes compilables), puis des Blueprints enfants : `BP_ArenaGameMode`, `BP_ArenaPlayerController`, etc. Régler le GameMode du niveau dans World Settings.
+- [x] **1.2.1** Créer les classes ci-dessus (squelettes compilables), puis des Blueprints enfants : `BP_ArenaGameMode`, `BP_ArenaPlayerController`, etc. Régler le GameMode du niveau dans World Settings.
 - [ ] **1.2.2 Élixir** : maximum 10, départ à 5, +1 toutes les 2,8 s, ×2 pendant la dernière minute et les prolongations. Calculé sur le serveur, répliqué dans le PlayerState.
 - [ ] **1.2.3 Deck et main** : un deck de 8 cartes mélangé, 4 en main et 1 « suivante ». Quand une carte est jouée, la suivante entre en main et la carte jouée retourne sous la pile.
 - [ ] **1.2.4 Placement** : glisser une carte sur le terrain fait un trace sous la souris et affiche une prévisualisation. Le placement est valide si le point est dans la `ZONE_Deploiement` de son équipe et sur la NavMesh (les sorts peuvent viser partout). `ServerPlayCard` revérifie l'élixir et la zone, puis fait apparaître l'unité ou les unités avec un délai d'apparition de 1 s.
@@ -187,3 +187,15 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
   - Vérifié en PIE : en 16:9 (1280×722), camp J, caméra en (0, 2423, 3137) avec un FOV horizontal de 72,6°, toute l'arène visible. En Listen Server à 2 joueurs, le client reçoit le camp A, caméra en (0, −2423, 3137), vue retournée. Seuls les dômes décoratifs des coins du rempart côté J débordent légèrement en bas.
   - `import_unreal.py` (hors dépôt) efface maintenant la source d'import FBX de chaque mesh avant de l'enregistrer.
   - Erreur « GameFeatureData » au démarrage : l'entrée manquante a été ajoutée à `PrimaryAssetTypesToScan` (`DefaultGame.ini`) via le lien du journal des messages.
+- 2026-10-09 — 1.2.1 faite : squelettes C++ de toutes les classes de 1.1 et Blueprints enfants.
+  - Nouvelles classes : `AArenaGameState`, `UArenaCardData`, `AArenaUnit`, `AArenaUnitAIController`, `UArenaHealthComponent`, `UArenaAttackComponent`, `AArenaProjectile`, `AArenaBuilding`, `AArenaAIOpponent`. Types partagés dans `ArenaTypes.h` : phase de partie, type de carte, type de cible, type et état de bâtiment, et `FArenaAttackStats` (dégâts, cadence, portée, cible, zone, projectile), commun aux cartes et aux bâtiments. Modules ajoutés : `AIModule`, `GameplayTasks`, `NavigationSystem`.
+  - Décisions :
+    - `AArenaGameMode::TryPlayCard(PlayerState, Card, Location)` est le point d'entrée unique pour jouer une carte : `ServerPlayCard(Card, Location)` (RPC du PlayerController) l'appelle pour un humain, l'IA l'appellera directement. La carte est passée par pointeur d'asset, et le serveur vérifiera qu'elle est dans la main.
+    - `AArenaAIOpponent` aura son propre `AArenaPlayerState` (élixir, deck, main), pour que le solo passe par le même code qu'un joueur humain.
+    - Le chrono n'est pas répliqué à chaque image : le GameState réplique l'heure de fin de phase (horloge serveur), et chaque client calcule le temps restant.
+    - Élixir, main et carte suivante sont répliqués au seul propriétaire (`COND_OwnerOnly`). Le deck reste sur le serveur.
+    - Valeurs par défaut du plan déjà dans le code : partie 180 s, prolongations 120 s, délai d'apparition 1 s ; tour 1400 PV, 50 dégâts / 0,8 s, portée 700 ; fort 2400 PV, 70 dégâts / 1,0 s, portée 700.
+    - `UArenaHealthComponent` est déjà complet : PV répliqués, `ApplyDamage`, `OnDamaged`, `OnDied` et `OnHealthChanged` (ce dernier aussi chez les clients).
+  - Blueprints dans `/Game/Arene/Blueprints` : `BP_ArenaGameMode` (qui référence les BP de GameState, PlayerController, PlayerState et Building), `BP_ArenaGameState`, `BP_ArenaPlayerState`, `BP_ArenaPlayerController`, `BP_ArenaUnit`, `BP_ArenaBuilding`, `BP_ArenaProjectile`. Le GameMode du niveau Arene est maintenant `BP_ArenaGameMode`. Vérifié en PIE : toutes les classes BP sont instanciées, et la caméra est inchangée.
+  - Compilation : l'éditeur doit être fermé pour `Build.bat` (« Unable to build while Live Coding is active »). Les avertissements C4996 sur `Character.h` viennent du moteur.
+  - Problème ouvert : `BP_ArenaAIOpponent` n'a pas pu être créé, car `AInfo` est `NotBlueprintable`. `UCLASS(Blueprintable)` est ajouté dans le code mais **pas encore compilé** : créer le BP après la prochaine compilation (au plus tard en 1.2.8).
