@@ -3,6 +3,13 @@
 	"EngineAssociation": "{ED5B87D1-472F-A545-DE27-CFBEEB058503}",
 	"Category": "",
 	"Description": "",
+	"Modules": [
+		{
+			"Name": "Anera",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
 	"Plugins": [
 		{
 			"Name": "ModelingToolsEditorMode",
