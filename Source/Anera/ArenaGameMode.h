@@ -48,6 +48,16 @@ protected:
 	void TryStartMatch();
 	void StartMatch();
 
+	// Fin du temps réglementaire : prolongations si les couronnes sont à égalité, sinon fin de partie.
+	void HandleRegularTimeOver();
+
+	// Fin de partie. Winner = Aucun pour un match nul.
+	void EndMatch(EArenaTeam Winner);
+
+	// Départage à la fin des prolongations : le camp dont le bâtiment le plus abîmé a gardé
+	// la plus grande part de ses PV gagne (bâtiments détruits exclus). Aucun en cas d'égalité.
+	EArenaTeam GetTieBreakWinner() const;
+
 	AArenaGameState* GetArenaGameState() const;
 
 	// Deck d'un joueur au lancement de la partie.

@@ -5,6 +5,7 @@
 #include "ArenaCardData.h"
 #include "ArenaCombat.h"
 #include "ArenaGameState.h"
+#include "ArenaHealthComponent.h"
 #include "ArenaLevel.h"
 #include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
@@ -94,24 +95,36 @@ void AArenaGameMode::HandleBuildingDestroyed(AArenaBuilding* Building)
 		return;
 	}
 
+	if (!ArenaGameState->IsMatchRunning())
+	{
+		return;
+	}
+
 	if (Building->GetBuildingType() == EArenaBuildingType::Fort)
 	{
-		// Le fort vaut toutes les couronnes : 3 au total.
+		// Le fort vaut toutes les couronnes (3 au total) et la victoire immédiate.
 		ArenaGameState->SetCrowns(Scorer, 3);
+		EndMatch(Scorer);
+		return;
 	}
-	else
+
+	ArenaGameState->AddCrowns(Scorer, 1);
+	UE_LOG(LogArene, Log, TEXT("Couronnes : J %d - A %d"), ArenaGameState->GetCrowns(EArenaTeam::J), ArenaGameState->GetCrowns(EArenaTeam::A));
+
+	// Une tour tombée réveille le fort de son camp.
+	for (AArenaBuilding* Other : Buildings)
 	{
-		ArenaGameState->AddCrowns(Scorer, 1);
-		// Une tour tombée réveille le fort de son camp.
-		for (AArenaBuilding* Other : Buildings)
+		if (Other && Other->GetTeam() == Building->GetTeam() && Other->GetBuildingType() == EArenaBuildingType::Fort)
 		{
-			if (Other && Other->GetTeam() == Building->GetTeam() && Other->GetBuildingType() == EArenaBuildingType::Fort)
-			{
-				Other->Activate();
-			}
+			Other->Activate();
 		}
 	}
-	UE_LOG(LogArene, Log, TEXT("Couronnes : J %d - A %d"), ArenaGameState->GetCrowns(EArenaTeam::J), ArenaGameState->GetCrowns(EArenaTeam::A));
+
+	// En prolongations, la première couronne l'emporte.
+	if (ArenaGameState->GetMatchPhase() == EArenaMatchPhase::Overtime)
+	{
+		EndMatch(Scorer);
+	}
 }
 
 void AArenaGameMode::PostLogin(APlayerController* NewPlayer)
@@ -166,6 +179,76 @@ void AArenaGameMode::Tick(float DeltaSeconds)
 			ArenaPlayer->AddElixir(ElixirGain);
 		}
 	}
+
+	if (ArenaGameState->GetRemainingTime() <= 0.f)
+	{
+		if (ArenaGameState->GetMatchPhase() == EArenaMatchPhase::InProgress)
+		{
+			HandleRegularTimeOver();
+		}
+		else
+		{
+			EndMatch(GetTieBreakWinner());
+		}
+	}
+}
+
+void AArenaGameMode::HandleRegularTimeOver()
+{
+	const AArenaGameState* ArenaGameState = GetArenaGameState();
+	const int32 CrownsJ = ArenaGameState->GetCrowns(EArenaTeam::J);
+	const int32 CrownsA = ArenaGameState->GetCrowns(EArenaTeam::A);
+	if (CrownsJ != CrownsA)
+	{
+		EndMatch(CrownsJ > CrownsA ? EArenaTeam::J : EArenaTeam::A);
+	}
+	else if (OvertimeDuration > 0.f)
+	{
+		GetArenaGameState()->SetMatchPhase(EArenaMatchPhase::Overtime, OvertimeDuration);
+		UE_LOG(LogArene, Log, TEXT("Egalite %d - %d : prolongations (%.0f s)"), CrownsJ, CrownsA, OvertimeDuration);
+	}
+	else
+	{
+		EndMatch(GetTieBreakWinner());
+	}
+}
+
+void AArenaGameMode::EndMatch(EArenaTeam Winner)
+{
+	AArenaGameState* ArenaGameState = GetArenaGameState();
+	if (!ArenaGameState || !ArenaGameState->IsMatchRunning())
+	{
+		return;
+	}
+	// Plus de chrono ni d'élixir : unités et bâtiments s'arrêtent d'eux-mêmes en voyant la phase Fin.
+	ArenaGameState->SetMatchPhase(EArenaMatchPhase::Ended, 0.f);
+	ArenaGameState->SetDoubleElixir(false);
+	ArenaGameState->SetWinner(Winner);
+	UE_LOG(LogArene, Log, TEXT("Fin de la partie : %s (couronnes J %d - A %d)"),
+		Winner == EArenaTeam::J ? TEXT("victoire de J") : Winner == EArenaTeam::A ? TEXT("victoire de A") : TEXT("match nul"),
+		ArenaGameState->GetCrowns(EArenaTeam::J), ArenaGameState->GetCrowns(EArenaTeam::A));
+}
+
+EArenaTeam AArenaGameMode::GetTieBreakWinner() const
+{
+	float WorstJ = 1.f;
+	float WorstA = 1.f;
+	for (const AArenaBuilding* Building : Buildings)
+	{
+		if (!Building || Building->IsDestroyed())
+		{
+			continue;
+		}
+		const float Fraction = Building->GetHealthComponent()->GetHealthFraction();
+		float& Worst = Building->GetTeam() == EArenaTeam::J ? WorstJ : WorstA;
+		Worst = FMath::Min(Worst, Fraction);
+	}
+	UE_LOG(LogArene, Log, TEXT("Departage : batiment le plus abime J %.0f %% - A %.0f %%"), WorstJ * 100.f, WorstA * 100.f);
+	if (FMath::IsNearlyEqual(WorstJ, WorstA, 0.0001f))
+	{
+		return EArenaTeam::None;
+	}
+	return WorstJ > WorstA ? EArenaTeam::J : EArenaTeam::A;
 }
 
 void AArenaGameMode::TryStartMatch()

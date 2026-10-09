@@ -57,7 +57,7 @@ Règle : tout état de jeu est modifié sur le serveur. Les clients ne font qu'e
   - Sans cible, l'unité suit les `CHEMIN_IA_<équipe>_<voie>` de sa voie. La voie est choisie selon le côté du terrain où elle a été posée.
   - Elle s'arrête à portée, attaque à sa cadence, et change de cible si la cible meurt.
 - [x] **1.2.6 Bâtiments** (voir 1.4) : les tours tirent sur l'ennemi le plus proche à portée. Le fort est **inactif** tant qu'il n'a pas été touché et qu'aucune tour de son camp n'est détruite.
-- [ ] **1.2.7 Règles de partie** :
+- [x] **1.2.7 Règles de partie** :
   - Partie de 3:00, puis prolongations de 2:00 si les couronnes sont à égalité. La première couronne marquée en prolongations l'emporte.
   - Une tour détruite donne 1 couronne, le fort détruit donne 3 couronnes et la victoire immédiate.
   - Fin des prolongations à égalité : le camp dont le bâtiment le plus abîmé a le plus de PV en pourcentage gagne, sinon match nul.
