@@ -17,6 +17,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Arene|Partie")
 	EArenaMatchPhase GetMatchPhase() const { return MatchPhase; }
 
+	// Vrai pendant le temps réglementaire et les prolongations : on peut jouer des cartes.
+	UFUNCTION(BlueprintPure, Category = "Arene|Partie")
+	bool IsMatchRunning() const { return MatchPhase == EArenaMatchPhase::InProgress || MatchPhase == EArenaMatchPhase::Overtime; }
+
+	// Vrai quand l'élixir se recharge deux fois plus vite (dernière minute et prolongations).
+	UFUNCTION(BlueprintPure, Category = "Arene|Partie")
+	bool IsDoubleElixir() const { return bDoubleElixir; }
+
 	// Secondes avant la fin de la phase en cours (0 hors chrono).
 	UFUNCTION(BlueprintPure, Category = "Arene|Partie")
 	float GetRemainingTime() const;
@@ -32,6 +40,7 @@ public:
 	void SetMatchPhase(EArenaMatchPhase NewPhase, float Duration);
 	void AddCrowns(EArenaTeam Team, int32 Count);
 	void SetWinner(EArenaTeam NewWinner);
+	void SetDoubleElixir(bool bEnabled);
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -52,4 +61,7 @@ protected:
 
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Arene|Partie")
 	EArenaTeam Winner = EArenaTeam::None;
+
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Arene|Partie")
+	bool bDoubleElixir = false;
 };

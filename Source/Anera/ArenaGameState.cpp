@@ -47,6 +47,12 @@ void AArenaGameState::SetWinner(EArenaTeam NewWinner)
 	Winner = NewWinner;
 }
 
+void AArenaGameState::SetDoubleElixir(bool bEnabled)
+{
+	check(HasAuthority());
+	bDoubleElixir = bEnabled;
+}
+
 void AArenaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -55,4 +61,5 @@ void AArenaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(AArenaGameState, CrownsJ);
 	DOREPLIFETIME(AArenaGameState, CrownsA);
 	DOREPLIFETIME(AArenaGameState, Winner);
+	DOREPLIFETIME(AArenaGameState, bDoubleElixir);
 }
