@@ -19,7 +19,7 @@ Cocher `[x]` au fur et à mesure et tenir le Journal à jour en bas du fichier.
   - Redémarrer Claude Code dans le dossier du projet, puis vérifier avec `list_toolsets`.
 - [x] **0.4 Inventaire du niveau via MCP** : lister les acteurs tagués `slot`, `zone`, `chemin:*` et `batiment:*` avec leurs positions. Écrire dans le Journal l'axe « camp J → camp A » réel (+X, -X, +Y ou -Y) et les positions des 6 `SLOT_Tour_*` / `SLOT_Fort_*`.
 - [x] **0.5 Contrôle de version** : `git init` avec un `.gitignore` Unreal (Binaries, Intermediate, Saved, DerivedDataCache, .vs). Activer Git LFS pour `*.uasset` et `*.umap`. Premier commit.
-- [ ] **0.6 Caméra PC** : adapter `Camera_Arene` au 16:9 (FOV et hauteur) pour que tout le terrain soit visible, le camp J en bas de l'écran. Le PlayerController l'utilise comme caméra de vue (`SetViewTargetWithBlend`). Côté joueur A, la vue doit être retournée de 180° pour que chacun voie son camp en bas.
+- [x] **0.6 Caméra PC** : adapter `Camera_Arene` au 16:9 (FOV et hauteur) pour que tout le terrain soit visible, le camp J en bas de l'écran. Le PlayerController l'utilise comme caméra de vue (`SetViewTargetWithBlend`). Côté joueur A, la vue doit être retournée de 180° pour que chacun voie son camp en bas.
 
 **Terminé quand** : MCP répond, le projet compile, et en PIE la vue montre toute l'arène depuis `Camera_Arene`.
 
@@ -180,3 +180,10 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
   - « Ce projet a été réalisé avec une version différente » : l'association moteur était un GUID du registre, effacé par Unreal comme doublon de l'installation launcher. Corrigé avec `"EngineAssociation": "5.8"`.
   - `EditorStartupMap` et `GameDefaultMap` pointent maintenant sur `/Game/Arene/Maps/Arene`.
   - Problèmes ouverts : 0.6 (caméra 16:9) ; erreur au démarrage « Asset manager settings do not include a rule for assets of type GameFeatureData » (plugin GameFeatures, chargé avec les toolsets MCP).
+- 2026-10-09 — 0.6 faite : **Phase 0 terminée**.
+  - `Camera_Arene` n'est pas modifiée, puisque le script d'import l'écraserait. `AArenaPlayerController` crée sa propre caméra locale : orientation de `Camera_Arene` (pitch −54°), tournée de 180° pour le camp A, puis placée pour que les zones de déploiement (tag `zone`) et les bâtiments intacts (tag `etat:Intact`) tiennent à l'écran, avec 3 % de marge. Elle se recadre à chaque changement de taille de fenêtre ou de camp.
+  - Réglages dans le PlayerController : `VerticalFieldOfView` (45° par défaut), `ScreenMargin{Left,Right,Top,Bottom}` (pour réserver la place de l'interface en phase 3).
+  - Ajouts anticipés de la phase 1 : `EArenaTeam` (`ArenaTypes.h`), `AArenaPlayerState` (camp répliqué), et dans `AArenaGameMode` les classes du joueur, aucun pion, et le camp J pour le premier connecté, A pour le suivant. Le GameMode du niveau Arene est réglé dans les World Settings. Catégorie de log `LogArene`.
+  - Vérifié en PIE : en 16:9 (1280×722), camp J, caméra en (0, 2423, 3137) avec un FOV horizontal de 72,6°, toute l'arène visible. En Listen Server à 2 joueurs, le client reçoit le camp A, caméra en (0, −2423, 3137), vue retournée. Seuls les dômes décoratifs des coins du rempart côté J débordent légèrement en bas.
+  - `import_unreal.py` (hors dépôt) efface maintenant la source d'import FBX de chaque mesh avant de l'enregistrer.
+  - Erreur « GameFeatureData » au démarrage : l'entrée manquante a été ajoutée à `PrimaryAssetTypesToScan` (`DefaultGame.ini`) via le lien du journal des messages.
