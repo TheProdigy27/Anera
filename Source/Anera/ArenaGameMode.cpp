@@ -276,8 +276,48 @@ void AArenaGameMode::TryStartMatch()
 	}
 }
 
+void AArenaGameMode::SpawnAIOpponents()
+{
+	if (GetNetMode() != NM_Standalone)
+	{
+		return;
+	}
+	SpawnAIOpponent(EArenaTeam::A, nullptr);
+
+	if (bDemoMode)
+	{
+		for (APlayerState* Player : GameState->PlayerArray)
+		{
+			AArenaPlayerState* ArenaPlayer = Cast<AArenaPlayerState>(Player);
+			if (ArenaPlayer && ArenaPlayer->GetTeam() == EArenaTeam::J)
+			{
+				SpawnAIOpponent(EArenaTeam::J, ArenaPlayer);
+				break;
+			}
+		}
+	}
+}
+
+AArenaAIOpponent* AArenaGameMode::SpawnAIOpponent(EArenaTeam Team, AArenaPlayerState* ExistingState)
+{
+	// Apparition différée : camp et PlayerState sont réglés avant son BeginPlay.
+	AArenaAIOpponent* Opponent = GetWorld()->SpawnActorDeferred<AArenaAIOpponent>(AIOpponentClass, FTransform::Identity);
+	if (!Opponent)
+	{
+		return nullptr;
+	}
+	Opponent->SetTeam(Team);
+	Opponent->SetControlledState(ExistingState);
+	Opponent->FinishSpawning(FTransform::Identity);
+	AIOpponents.Add(Opponent);
+	UE_LOG(LogArene, Log, TEXT("IA du camp %s"), Team == EArenaTeam::J ? TEXT("J (demo)") : TEXT("A"));
+	return Opponent;
+}
+
 void AArenaGameMode::StartMatch()
 {
+	SpawnAIOpponents();
+
 	AArenaGameState* ArenaGameState = GetArenaGameState();
 	for (APlayerState* Player : GameState->PlayerArray)
 	{
@@ -305,6 +345,12 @@ AArenaGameState* AArenaGameMode::GetArenaGameState() const
 
 TArray<UArenaCardData*> AArenaGameMode::GetDeckFor(const AArenaPlayerState* Player) const
 {
+	// Une IA peut avoir son propre deck (réglé dans son Blueprint).
+	const AArenaAIOpponent* Opponent = Player ? Cast<AArenaAIOpponent>(Player->GetOwner()) : nullptr;
+	if (Opponent && !Opponent->GetDeck().IsEmpty())
+	{
+		return Opponent->GetDeck();
+	}
 	return ObjectPtrDecay(DefaultDeck);
 }
 

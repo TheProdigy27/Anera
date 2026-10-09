@@ -48,6 +48,11 @@ protected:
 	void TryStartMatch();
 	void StartMatch();
 
+	// Solo (partie sans réseau) : une IA joue le camp A. En mode démo, une autre IA joue aussi le camp J
+	// avec le PlayerState du joueur.
+	void SpawnAIOpponents();
+	AArenaAIOpponent* SpawnAIOpponent(EArenaTeam Team, AArenaPlayerState* ExistingState);
+
 	// Fin du temps réglementaire : prolongations si les couronnes sont à égalité, sinon fin de partie.
 	void HandleRegularTimeOver();
 
@@ -104,6 +109,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Classes")
 	TSubclassOf<AArenaAIOpponent> AIOpponentClass;
 
+	// Test : en solo, une IA joue aussi le camp J à la place du joueur (partie IA contre IA à regarder).
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Partie")
+	bool bDemoMode = false;
+
 	UPROPERTY(Transient, VisibleInstanceOnly, Category = "Arene|Partie")
 	TArray<TObjectPtr<AArenaBuilding>> Buildings;
+
+	UPROPERTY(Transient, VisibleInstanceOnly, Category = "Arene|Partie")
+	TArray<TObjectPtr<AArenaAIOpponent>> AIOpponents;
 };
