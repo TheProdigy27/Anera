@@ -6,6 +6,7 @@
 #include "ArenaCombat.h"
 #include "ArenaGameState.h"
 #include "ArenaHealthComponent.h"
+#include "ArenaHUD.h"
 #include "ArenaLevel.h"
 #include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
@@ -22,6 +23,7 @@ AArenaGameMode::AArenaGameMode()
 	GameStateClass = AArenaGameState::StaticClass();
 	PlayerControllerClass = AArenaPlayerController::StaticClass();
 	PlayerStateClass = AArenaPlayerState::StaticClass();
+	HUDClass = AArenaHUD::StaticClass();
 	// Pas de personnage à diriger : le joueur pose des cartes depuis une caméra fixe.
 	DefaultPawnClass = nullptr;
 

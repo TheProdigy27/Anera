@@ -62,7 +62,7 @@ Règle : tout état de jeu est modifié sur le serveur. Les clients ne font qu'e
   - Une tour détruite donne 1 couronne, le fort détruit donne 3 couronnes et la victoire immédiate.
   - Fin des prolongations à égalité : le camp dont le bâtiment le plus abîmé a le plus de PV en pourcentage gagne, sinon match nul.
 - [x] **1.2.8** `AArenaAIOpponent` joue le camp A en solo.
-- [ ] **1.2.9 Débogage** : texte à l'écran avec élixir, chrono, couronnes et PV des bâtiments, en attendant la vraie interface (phase 3).
+- [x] **1.2.9 Débogage** : texte à l'écran avec élixir, chrono, couronnes et PV des bâtiments, en attendant la vraie interface (phase 3).
 
 ### 1.3 Cartes de départ (Data Assets `DA_Carte_*`, statistiques à équilibrer en phase 5)
 Unités en formes simples pour l'instant : capsule colorée par équipe.
