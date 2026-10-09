@@ -11,14 +11,14 @@ Cocher `[x]` au fur et à mesure et tenir le Journal à jour en bas du fichier.
 ## Phase 0 — Mise en route (1 session)
 
 - [x] **0.1 Repérer le projet** : chemin du `.uproject`, version exacte d'UE 5, nom et chemin du niveau de l'arène. Les noter dans le Journal.
-- [ ] **0.2 Projet C++** : vérifier s'il existe un module C++ (`Source/`). Sinon, en ajouter un (Tools > New C++ Class… > `GameModeBase` suffit pour générer le module), puis compiler. Noter dans le Journal le nom du module, appelé `<Module>` dans la suite.
+- [x] **0.2 Projet C++** : vérifier s'il existe un module C++ (`Source/`). Sinon, en ajouter un (Tools > New C++ Class… > `GameModeBase` suffit pour générer le module), puis compiler. Noter dans le Journal le nom du module, appelé `<Module>` dans la suite.
 - [x] **0.3 Connecter Unreal MCP** :
   - Activer les plugins **Model Context Protocol** et **All Toolsets** (Edit > Plugins), puis redémarrer l'éditeur.
   - Ajouter `bAutoStartServer=True` sous `[/Script/ModelContextProtocolEngine.ModelContextProtocolSettings]`, dans `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`.
   - Dans la console de l'éditeur : `ModelContextProtocol.GenerateClientConfig ClaudeCode`, ce qui génère le `.mcp.json`.
   - Redémarrer Claude Code dans le dossier du projet, puis vérifier avec `list_toolsets`.
 - [x] **0.4 Inventaire du niveau via MCP** : lister les acteurs tagués `slot`, `zone`, `chemin:*` et `batiment:*` avec leurs positions. Écrire dans le Journal l'axe « camp J → camp A » réel (+X, -X, +Y ou -Y) et les positions des 6 `SLOT_Tour_*` / `SLOT_Fort_*`.
-- [ ] **0.5 Contrôle de version** : `git init` avec un `.gitignore` Unreal (Binaries, Intermediate, Saved, DerivedDataCache, .vs). Activer Git LFS pour `*.uasset` et `*.umap`. Premier commit.
+- [x] **0.5 Contrôle de version** : `git init` avec un `.gitignore` Unreal (Binaries, Intermediate, Saved, DerivedDataCache, .vs). Activer Git LFS pour `*.uasset` et `*.umap`. Premier commit.
 - [ ] **0.6 Caméra PC** : adapter `Camera_Arene` au 16:9 (FOV et hauteur) pour que tout le terrain soit visible, le camp J en bas de l'écran. Le PlayerController l'utilise comme caméra de vue (`SetViewTargetWithBlend`). Côté joueur A, la vue doit être retournée de 180° pour que chacun voie son camp en bas.
 
 **Terminé quand** : MCP répond, le projet compile, et en PIE la vue montre toute l'arène depuis `Camera_Arene`.
@@ -173,3 +173,10 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - Pas de dépôt git (git 2.55 et git-lfs 3.7 sont installés).
     - `Camera_Arene` est encore en 9:16 (AspectRatio 0,5625, FOV horizontal 42,6°, `AutoActivateForPlayer = Player0`). En 16:9, le cadre irait seulement d'environ y = +900 à y = −1000, et les deux forts sortiraient de l'écran.
     - World Settings sans GameMode (normal avant la phase 1).
+- 2026-10-09 — 0.2 et 0.5 faites.
+  - 0.2 : module C++ **`Anera`** (c'est le `<Module>` de la suite, macro d'export `ANERA_API`), cibles `Anera` et `AneraEditor` (UE 5.8.3, Visual Studio Community 2026). Il contient un `AArenaGameMode` vide, et l'éditeur charge bien `/Script/Anera.ArenaGameMode`. Compilation hors éditeur : `Build.bat AneraEditor Win64 Development -Project=...`. Aucun toolset Live Coding n'est exposé par MCP (dans l'éditeur : Ctrl+Alt+F11).
+  - 0.5 : dépôt git (branche `main`, remote `origin` = GitHub `TheProdigy27/Anera`, **public**), `.gitignore` Unreal, Git LFS pour `*.uasset` / `*.umap`. Rien n'est poussé pour l'instant.
+  - Données perso retirées avant le premier push : prénom et chemins locaux (CLAUDE.md, PLAN.md), ainsi que le chemin, la date et le MD5 des FBX sources dans les 46 StaticMesh (données d'import effacées en commandlet Python). **Relancer `import_unreal.py` les remettrait.**
+  - « Ce projet a été réalisé avec une version différente » : l'association moteur était un GUID du registre, effacé par Unreal comme doublon de l'installation launcher. Corrigé avec `"EngineAssociation": "5.8"`.
+  - `EditorStartupMap` et `GameDefaultMap` pointent maintenant sur `/Game/Arene/Maps/Arene`.
+  - Problèmes ouverts : 0.6 (caméra 16:9) ; erreur au démarrage « Asset manager settings do not include a rule for assets of type GameFeatureData » (plugin GameFeatures, chargé avec les toolsets MCP).
