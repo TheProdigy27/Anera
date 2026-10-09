@@ -41,6 +41,12 @@ float AArenaBuilding::GetDistanceToWalls(const FVector& Point) const
 	return FMath::Max(0.f, static_cast<float>(FVector::Dist2D(Point, GetActorLocation())) - FallbackRadius);
 }
 
+FVector AArenaBuilding::GetClosestWallPoint(const FVector& Point) const
+{
+	const FVector Center = GetActorLocation();
+	return Center + (Point - Center).GetSafeNormal2D() * FallbackRadius;
+}
+
 FVector AArenaBuilding::GetAimPoint() const
 {
 	return GetActorLocation() + FVector(0.f, 0.f, 150.f);

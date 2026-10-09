@@ -40,6 +40,9 @@ public:
 	// Distance à plat entre un point et les murs du bâtiment (0 si le point est dedans).
 	float GetDistanceToWalls(const FVector& Point) const;
 
+	// Point des murs le plus proche de Point (pour qu'une unité vienne s'y placer).
+	FVector GetClosestWallPoint(const FVector& Point) const;
+
 	// Point visé par les projectiles.
 	FVector GetAimPoint() const;
 

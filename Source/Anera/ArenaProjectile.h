@@ -5,12 +5,12 @@
 #include "ArenaTypes.h"
 #include "ArenaProjectile.generated.h"
 
-class UProjectileMovementComponent;
 class USphereComponent;
+class UStaticMeshComponent;
 
 // Projectile simple (flèche, boule) qui file vers sa cible et inflige ses dégâts à l'impact.
-// Créé par le serveur et répliqué : les clients ne font que le voir passer.
-// Squelette : le vol et l'impact arrivent en 1.2.5.
+// Créé par le serveur et répliqué. Sa cible est répliquée aussi : chaque machine calcule elle-même
+// sa trajectoire (fluide, sans envoyer sa position à chaque image), mais seul le serveur applique les dégâts.
 UCLASS()
 class ANERA_API AArenaProjectile : public AActor
 {
@@ -19,18 +19,29 @@ class ANERA_API AArenaProjectile : public AActor
 public:
 	AArenaProjectile();
 
-	// Serveur uniquement, juste après l'apparition.
-	void InitializeProjectile(AActor* InTarget, float InDamage, float InSplashRadius, EArenaTeam InTeam);
+	// Serveur uniquement, entre SpawnActorDeferred et FinishSpawning.
+	void InitializeProjectile(AActor* InTarget, float InDamage, float InSplashRadius, EArenaTargetType InTargetType, EArenaTeam InTeam);
+
+	virtual void Tick(float DeltaSeconds) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
+	virtual void BeginPlay() override;
+
+	// Serveur : dégâts au point d'arrivée, puis destruction.
+	void Impact();
+
 	UPROPERTY(VisibleAnywhere, Category = "Arene|Projectile")
 	TObjectPtr<USphereComponent> CollisionComponent;
 
 	UPROPERTY(VisibleAnywhere, Category = "Arene|Projectile")
-	TObjectPtr<UProjectileMovementComponent> MovementComponent;
+	TObjectPtr<UStaticMeshComponent> VisualMesh;
 
-	UPROPERTY(Transient, VisibleInstanceOnly, Category = "Arene|Projectile")
-	TWeakObjectPtr<AActor> Target;
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Projectile", meta = (ClampMin = "1", Units = "cm/s"))
+	float Speed = 1500.f;
+
+	UPROPERTY(Replicated, VisibleInstanceOnly, Category = "Arene|Projectile")
+	TObjectPtr<AActor> Target;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Arene|Projectile")
 	float Damage = 0.f;
@@ -39,5 +50,13 @@ protected:
 	float SplashRadius = 0.f;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Arene|Projectile")
+	EArenaTargetType TargetType = EArenaTargetType::GroundAndAir;
+
+	UPROPERTY(VisibleInstanceOnly, Category = "Arene|Projectile")
 	EArenaTeam Team = EArenaTeam::None;
+
+private:
+	// Dernière position connue de la cible : le projectile y termine sa course si la cible disparaît.
+	FVector Destination = FVector::ZeroVector;
+	bool bArrived = false;
 };
