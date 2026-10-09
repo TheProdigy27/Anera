@@ -41,6 +41,11 @@ void AArenaGameState::AddCrowns(EArenaTeam Team, int32 Count)
 	}
 }
 
+void AArenaGameState::SetCrowns(EArenaTeam Team, int32 Count)
+{
+	AddCrowns(Team, Count - GetCrowns(Team));
+}
+
 void AArenaGameState::SetWinner(EArenaTeam NewWinner)
 {
 	check(HasAuthority());

@@ -10,6 +10,7 @@
 #include "ArenaPlayerState.h"
 #include "ArenaUnit.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 
 AArenaGameMode::AArenaGameMode()
@@ -30,7 +31,87 @@ AArenaGameMode::AArenaGameMode()
 void AArenaGameMode::StartPlay()
 {
 	Super::StartPlay();
+	SpawnBuildings();
 	TryStartMatch();
+}
+
+void AArenaGameMode::SpawnBuildings()
+{
+	TArray<AActor*> Slots;
+	UGameplayStatics::GetAllActorsWithTag(this, TEXT("slot"), Slots);
+
+	for (const AActor* Slot : Slots)
+	{
+		const FString Type = ArenaLevel::GetTagValue(Slot, TEXT("type"));
+		if (Type != TEXT("tour") && Type != TEXT("fort"))
+		{
+			continue;
+		}
+		const EArenaTeam Team = ArenaLevel::GetTagTeam(Slot);
+
+		// Le groupe (« Tour_Gauche_J »…) est lu sur le SLOT_Unite_* posé au sommet du bâtiment (tag « parent: »).
+		// Les noms affichés dans l'Outliner n'existent pas dans un jeu packagé : on ne s'en sert pas.
+		const FString TopType = Type == TEXT("tour") ? TEXT("unite_tour") : TEXT("unite_fort");
+		const AActor* Top = nullptr;
+		for (const AActor* Candidate : Slots)
+		{
+			if (ArenaLevel::GetTagValue(Candidate, TEXT("type")) == TopType && ArenaLevel::GetTagTeam(Candidate) == Team
+				&& (!Top || FVector::Dist2D(Candidate->GetActorLocation(), Slot->GetActorLocation())
+					< FVector::Dist2D(Top->GetActorLocation(), Slot->GetActorLocation())))
+			{
+				Top = Candidate;
+			}
+		}
+		const FString Group = ArenaLevel::GetTagValue(Top, TEXT("parent"));
+		if (Group.IsEmpty())
+		{
+			UE_LOG(LogArene, Warning, TEXT("Slot %s : aucun slot '%s' avec un tag 'parent:' a proximite, batiment ignore."), *Slot->GetName(), *TopType);
+			continue;
+		}
+
+		const FTransform SpawnTransform(Slot->GetActorRotation(), Slot->GetActorLocation());
+		AArenaBuilding* Building = GetWorld()->SpawnActorDeferred<AArenaBuilding>(BuildingClass, SpawnTransform, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!Building)
+		{
+			continue;
+		}
+		Building->InitializeBuilding(FName(*Group), Type == TEXT("fort") ? EArenaBuildingType::Fort : EArenaBuildingType::Tower,
+			Team, Top->GetActorLocation());
+		Building->FinishSpawning(SpawnTransform);
+		Building->OnBuildingDestroyed.AddDynamic(this, &AArenaGameMode::HandleBuildingDestroyed);
+		Buildings.Add(Building);
+	}
+	UE_LOG(LogArene, Log, TEXT("%d batiments places"), Buildings.Num());
+}
+
+void AArenaGameMode::HandleBuildingDestroyed(AArenaBuilding* Building)
+{
+	AArenaGameState* ArenaGameState = GetArenaGameState();
+	const EArenaTeam Scorer = ArenaLevel::GetOpponent(Building->GetTeam());
+	if (!ArenaGameState || Scorer == EArenaTeam::None)
+	{
+		return;
+	}
+
+	if (Building->GetBuildingType() == EArenaBuildingType::Fort)
+	{
+		// Le fort vaut toutes les couronnes : 3 au total.
+		ArenaGameState->SetCrowns(Scorer, 3);
+	}
+	else
+	{
+		ArenaGameState->AddCrowns(Scorer, 1);
+		// Une tour tombée réveille le fort de son camp.
+		for (AArenaBuilding* Other : Buildings)
+		{
+			if (Other && Other->GetTeam() == Building->GetTeam() && Other->GetBuildingType() == EArenaBuildingType::Fort)
+			{
+				Other->Activate();
+			}
+		}
+	}
+	UE_LOG(LogArene, Log, TEXT("Couronnes : J %d - A %d"), ArenaGameState->GetCrowns(EArenaTeam::J), ArenaGameState->GetCrowns(EArenaTeam::A));
 }
 
 void AArenaGameMode::PostLogin(APlayerController* NewPlayer)

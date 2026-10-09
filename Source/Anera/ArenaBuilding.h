@@ -5,12 +5,21 @@
 #include "ArenaTypes.h"
 #include "ArenaBuilding.generated.h"
 
+class AArenaBuilding;
 class UArenaAttackComponent;
 class UArenaHealthComponent;
+class UPrimitiveComponent;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FArenaBuildingDestroyedSignature, AArenaBuilding*, Building);
 
 // Tour ou fort. Le GameMode en fait apparaître un sur chaque SLOT_Tour_* / SLOT_Fort_*.
-// Il n'a pas de mesh à lui : il pilote les 3 meshes importés (Intact, Endommage, Ruine) de son groupe.
-// Squelette : pilotage des meshes en 1.4, tirs en 1.2.6.
+// Il n'a pas de mesh à lui : il pilote les acteurs importés de son groupe (tags « batiment:<Groupe> »
+// et « etat:Intact|Endommage|Ruine » : meshes, flammes et lumières). Seul l'état courant est visible et a
+// une collision. L'état découle des PV : au-dessus de 50 % Intact, puis Endommagé, et Ruine à 0.
+// Chaque machine affiche elle-même les bons acteurs, à partir du groupe et de l'état répliqués.
+//
+// Les tours tirent sur l'ennemi le plus proche à portée. Le fort reste inactif tant qu'il n'a pas été
+// touché et qu'aucune tour de son camp n'est détruite.
 UCLASS()
 class ANERA_API AArenaBuilding : public AActor
 {
@@ -19,8 +28,11 @@ class ANERA_API AArenaBuilding : public AActor
 public:
 	AArenaBuilding();
 
-	// Serveur uniquement, juste après l'apparition. Group = nom du groupe importé (ex. « Tour_Gauche_J »).
-	void InitializeBuilding(FName InGroup, EArenaBuildingType InType, EArenaTeam InTeam);
+	// Serveur uniquement, entre SpawnActorDeferred et FinishSpawning.
+	// Group = nom du groupe importé (ex. « Tour_Gauche_J ») ; ProjectileOrigin = sommet (SLOT_Unite_<Groupe>).
+	void InitializeBuilding(FName InGroup, EArenaBuildingType InType, EArenaTeam InTeam, const FVector& ProjectileOrigin);
+
+	virtual void Tick(float DeltaSeconds) override;
 
 	UFUNCTION(BlueprintPure, Category = "Arene|Batiment")
 	EArenaTeam GetTeam() const { return Team; }
@@ -34,6 +46,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Arene|Batiment")
 	FName GetGroup() const { return Group; }
 
+	// Faux pour un fort encore endormi.
+	UFUNCTION(BlueprintPure, Category = "Arene|Batiment")
+	bool IsActive() const { return bActive; }
+
+	UFUNCTION(BlueprintPure, Category = "Arene|Batiment")
+	bool IsDestroyed() const { return BuildingState == EArenaBuildingState::Ruined; }
+
+	// Serveur : réveille le bâtiment (le fort, au premier coup reçu ou à la chute d'une tour de son camp).
+	void Activate();
+
 	UArenaHealthComponent* GetHealthComponent() const { return HealthComponent; }
 	UArenaAttackComponent* GetAttackComponent() const { return AttackComponent; }
 
@@ -44,14 +66,16 @@ public:
 	FVector GetClosestWallPoint(const FVector& Point) const;
 
 	// Point visé par les projectiles.
-	FVector GetAimPoint() const;
+	FVector GetAimPoint() const { return AimPoint; }
+
+	// Serveur et clients : le bâtiment vient d'être détruit (couronnes, effets de la phase 4).
+	UPROPERTY(BlueprintAssignable, Category = "Arene|Batiment")
+	FArenaBuildingDestroyedSignature OnBuildingDestroyed;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
-	// Rayon approximatif du bâtiment autour de son slot, en attendant de lire ses meshes (1.4).
-	UPROPERTY(EditDefaultsOnly, Category = "Arene|Batiment", meta = (ClampMin = "0", Units = "cm"))
-	float FallbackRadius = 120.f;
+	virtual void BeginPlay() override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Arene|Batiment")
 	TObjectPtr<UArenaHealthComponent> HealthComponent;
@@ -72,7 +96,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Batiment|Fort")
 	FArenaAttackStats FortAttack;
 
-	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Arene|Batiment")
+	// Au-dessus de cette part de PV, le bâtiment est intact ; en dessous, endommagé.
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Batiment", meta = (ClampMin = "0", ClampMax = "1"))
+	float DamagedThreshold = 0.5f;
+
+	// Temps entre deux recherches de cible.
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Batiment", meta = (ClampMin = "0.05", Units = "s"))
+	float TargetSearchInterval = 0.2f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Group, VisibleInstanceOnly, BlueprintReadOnly, Category = "Arene|Batiment")
 	FName Group;
 
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Arene|Batiment")
@@ -81,10 +113,45 @@ protected:
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Arene|Batiment")
 	EArenaTeam Team = EArenaTeam::None;
 
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Arene|Batiment")
+	bool bActive = true;
+
+	// ReplicatedUsing : chez les clients, OnRep_BuildingState affiche le nouvel état dès qu'il arrive.
 	UPROPERTY(ReplicatedUsing = OnRep_BuildingState, VisibleInstanceOnly, BlueprintReadOnly, Category = "Arene|Batiment")
 	EArenaBuildingState BuildingState = EArenaBuildingState::Intact;
 
-	// Chez les clients : affiche le mesh correspondant au nouvel état (1.4).
+private:
+	UFUNCTION()
+	void OnRep_Group();
+
 	UFUNCTION()
 	void OnRep_BuildingState();
+
+	// Retrouve les acteurs importés du groupe, rangés par état, et mesure le bâtiment intact.
+	void GatherLevelActors();
+
+	// Montre les acteurs de l'état courant (avec collision), cache les autres (sans collision).
+	void ApplyBuildingState();
+
+	// Collisions des murs visibles.
+	void ForEachWallComponent(TFunctionRef<void(const UPrimitiveComponent*)> Visit) const;
+
+	UFUNCTION()
+	void HandleHealthChanged(UArenaHealthComponent* ChangedHealth, float Damage, AActor* DamageCauser);
+
+	UFUNCTION()
+	void HandleDamaged(UArenaHealthComponent* DamagedHealth, float Damage, AActor* DamageCauser);
+
+	UFUNCTION()
+	void HandleDied(UArenaHealthComponent* DeadHealth, AActor* Killer);
+
+	// Acteurs importés de chaque état (Intact, Endommagé, Ruine). Ils appartiennent au niveau.
+	TArray<TWeakObjectPtr<AActor>> StateActors[3];
+	bool bGathered = false;
+
+	// Mesures du bâtiment intact (à défaut : valeurs approximatives autour du slot).
+	FVector AimPoint = FVector::ZeroVector;
+	float FallbackRadius = 120.f;
+
+	double NextTargetSearchTime = 0.0;
 };

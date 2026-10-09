@@ -39,6 +39,7 @@ public:
 	// Serveur uniquement. Duration <= 0 : pas de chrono pour cette phase.
 	void SetMatchPhase(EArenaMatchPhase NewPhase, float Duration);
 	void AddCrowns(EArenaTeam Team, int32 Count);
+	void SetCrowns(EArenaTeam Team, int32 Count);
 	void SetWinner(EArenaTeam NewWinner);
 	void SetDoubleElixir(bool bEnabled);
 

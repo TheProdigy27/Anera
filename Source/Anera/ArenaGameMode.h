@@ -31,6 +31,13 @@ public:
 	bool TryPlayCard(AArenaPlayerState* Player, UArenaCardData* Card, const FVector& Location);
 
 protected:
+	// Fait apparaître un AArenaBuilding sur chaque SLOT_Tour_* et SLOT_Fort_* du niveau.
+	void SpawnBuildings();
+
+	// Couronnes et réveil du fort quand un bâtiment tombe.
+	UFUNCTION()
+	void HandleBuildingDestroyed(AArenaBuilding* Building);
+
 	// Fait apparaître les unités de la carte autour de Location (au sol), en formation si elles sont plusieurs.
 	void SpawnUnits(UArenaCardData* Card, EArenaTeam Team, const FVector& Location);
 
@@ -86,4 +93,7 @@ protected:
 	// Classe de l'adversaire IA en solo.
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Classes")
 	TSubclassOf<AArenaAIOpponent> AIOpponentClass;
+
+	UPROPERTY(Transient, VisibleInstanceOnly, Category = "Arene|Partie")
+	TArray<TObjectPtr<AArenaBuilding>> Buildings;
 };
