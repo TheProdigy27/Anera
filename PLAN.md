@@ -82,16 +82,16 @@ Bâtiments : tour 1400 PV, 50 dégâts toutes les 0,8 s, portée 7 m. Fort 2400 
 Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) à une hauteur fixe.
 
 ### 1.4 Intégration avec les bâtiments importés
-- [ ] Au `BeginPlay`, le GameMode fait apparaître un `AArenaBuilding` sur chaque `SLOT_Tour_*` et `SLOT_Fort_*`. Il lit `type` et `equipe` dans les tags du slot, et récupère le groupe (`Tour_Gauche_J`…) depuis le nom du slot.
-- [ ] Le bâtiment récupère ses 3 meshes avec les tags `batiment:<Groupe>` + `etat:<Etat>`, les flammes et lumières associées comprises.
-- [ ] États pilotés par les PV :
+- [x] Au `BeginPlay`, le GameMode fait apparaître un `AArenaBuilding` sur chaque `SLOT_Tour_*` et `SLOT_Fort_*`. Il lit `type` et `equipe` dans les tags du slot, et récupère le groupe (`Tour_Gauche_J`…) depuis le nom du slot.
+- [x] Le bâtiment récupère ses 3 meshes avec les tags `batiment:<Groupe>` + `etat:<Etat>`, les flammes et lumières associées comprises.
+- [x] États pilotés par les PV :
   - au-dessus de 50 % : Intact ;
   - entre 0 et 50 % : Endommage ;
   - à 0 : Ruine.
   
   Au changement d'état : `SetActorHiddenInGame` et collision sur le bon mesh, et les autres sont cachés et sans collision. L'état est répliqué via `OnRep`.
-- [ ] À la destruction : arrêt des tirs, couronne attribuée, événement `OnBuildingDestroyed` (pour les effets de la phase 4).
-- [ ] Le `SLOT_Unite_<Groupe>` (sommet du bâtiment) sert de point de départ des projectiles de la tour. Plus tard, on y placera un tireur visible.
+- [x] À la destruction : arrêt des tirs, couronne attribuée, événement `OnBuildingDestroyed` (pour les effets de la phase 4).
+- [x] Le `SLOT_Unite_<Groupe>` (sommet du bâtiment) sert de point de départ des projectiles de la tour. Plus tard, on y placera un tireur visible.
 
 **Terminé quand** : en PIE, on pose des cartes contre l'IA, les unités traversent les ponts, se battent et attaquent les tours. Les tours passent par Intact, Endommage puis Ruine, les couronnes et le chrono fonctionnent, et la partie se termine avec un vainqueur.
 
@@ -199,3 +199,28 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
   - Blueprints dans `/Game/Arene/Blueprints` : `BP_ArenaGameMode` (qui référence les BP de GameState, PlayerController, PlayerState et Building), `BP_ArenaGameState`, `BP_ArenaPlayerState`, `BP_ArenaPlayerController`, `BP_ArenaUnit`, `BP_ArenaBuilding`, `BP_ArenaProjectile`. Le GameMode du niveau Arene est maintenant `BP_ArenaGameMode`. Vérifié en PIE : toutes les classes BP sont instanciées, et la caméra est inchangée.
   - Compilation : l'éditeur doit être fermé pour `Build.bat` (« Unable to build while Live Coding is active »). Les avertissements C4996 sur `Character.h` viennent du moteur.
   - Problème ouvert : `BP_ArenaAIOpponent` n'a pas pu être créé, car `AInfo` est `NotBlueprintable`. `UCLASS(Blueprintable)` est ajouté dans le code mais **pas encore compilé** : créer le BP après la prochaine compilation (au plus tard en 1.2.8).
+- 2026-10-09 — 1.2.2 à 1.2.9 faites, ainsi que la section 1.4 (nécessaire à 1.2.6). Un commit par tâche, puis des correctifs après les tests en PIE.
+  - Les 8 cartes `DA_Carte_*` (`/Game/Arene/Cartes`) ont été créées avec les valeurs du tableau 1.3, car elles étaient nécessaires aux tests. L'équilibrage reste à faire. `BP_ArenaGameMode` : `DefaultDeck` = ces 8 cartes, `AIOpponentClass` = `BP_ArenaAIOpponent`.
+  - Nouveaux modules sans classe : `ArenaLevel` (repères par tags : zones, chemins, direction d'attaque, NavMesh) et `ArenaCombat` (camps, ciblage, distances de bord à bord, dégâts de zone, ralentissement). Nouvelle classe `AArenaHUD` (texte de débogage).
+  - Décisions :
+    - Groupe d'un bâtiment = tag `parent:` du `SLOT_Unite_*` le plus proche, car les labels de l'Outliner n'existent pas dans un jeu packagé.
+    - Les unités apparaissent tout de suite et n'agissent qu'après 1 s ; les sorts s'appliquent après 1 s.
+    - Pose des cartes au clavier en attendant l'interface : touches 1 à 4, clic gauche pour poser, clic droit ou Échap pour annuler. Le placement doit être relié par la NavMesh au départ des chemins du camp, ce qui écarte le haut des tours et les socles.
+    - Distances aux bâtiments : rectangle au sol du mesh intact élargi de 100 uu pour le socle non marchable (constante `SocleWidth` dans `ArenaBuilding.cpp`). La requête physique `GetDistanceToCollision` donnait des distances fausses.
+    - Les unités ne se bloquent pas physiquement entre elles (canal Pawn ignoré). L'évitement RVO ne s'applique qu'entre alliés.
+    - Destinations de déplacement ramenées sur la NavMesh avec une tolérance de 2,5 m : un trou de collision devant la tour droite de A, vers (550, −700), faisait échouer les déplacements.
+    - Mode démo (`bDemoMode` dans le GameMode, faux par défaut) : une IA joue aussi le camp J, pour regarder une partie entière.
+  - Vérifié en PIE :
+    - Solo : 6 bâtiments posés, l'IA joue, élixir, couronnes, réveil du fort.
+    - Démo (durées raccourcies) : égalité, prolongations, puis départage par le bâtiment le plus abîmé et bannière de fin.
+    - Les tours passent par Intact, Endommagé et Ruine.
+    - Démo après les correctifs (durée normale) : aucune unité bloquée en 75 s, et à 1:31 de la fin J mène 2 à 1. Les deux tours de A et la tour droite de J sont en ruine, et les deux forts sont attaqués.
+    - Pas testé à la main : la pose des cartes à la souris (MCP ne peut pas cliquer en jeu).
+  - Outillage :
+    - `Build.bat` exige l'éditeur fermé.
+    - Pour des changements limités aux corps de fonctions, Live Coding se déclenche via MCP en tapant `LiveCoding.Compile` dans la console de l'éditeur (SlateInspector).
+    - Log de diagnostic des unités bloquées : `log LogArene Verbose`.
+  - Problèmes ouverts :
+    - Avant les derniers correctifs, une unité est restée quelques secondes au bout d'un pont, sur la pente du tablier : à surveiller avec le log de diagnostic.
+    - L'IA pose parfois ses unités sur le socle derrière ses tours (z = 50), qui est relié au terrain.
+    - Le chrono de test court (60 s) déclenche le ×2 élixir dès le début : c'est normal, la règle est « dernière minute ».

@@ -54,6 +54,15 @@ private:
 	// Lance un déplacement, sauf si on se dirige déjà à peu près vers ce point.
 	void IssueMove(const AArenaUnit* Unit, FVector Destination, float AcceptanceRadius);
 
+	// Diagnostic : signale (log LogArene, niveau Verbose) une unité qui veut avancer mais reste sur place.
+	void CheckProgress(const AArenaUnit* Unit, const AActor* Target);
+	void ResetProgress(const AArenaUnit* Unit);
+
+	FVector ProgressLocation = FVector::ZeroVector;
+	double ProgressTime = 0.0;
+	// Résultat de la dernière demande de déplacement (EPathFollowingRequestResult), pour le diagnostic.
+	int32 LastMoveResult = 0;
+
 	TArray<FVector> LanePath;
 	int32 WaypointIndex = 0;
 	FVector AttackDirection = FVector::ForwardVector;

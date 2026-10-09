@@ -25,8 +25,10 @@ namespace ArenaLevel
 	// Le point est-il au-dessus de la zone de déploiement du camp ? La hauteur est ignorée.
 	bool IsInDeploymentZone(const UObject* WorldContext, EArenaTeam Team, const FVector& Point);
 
-	// Point de la NavMesh juste sous le point visé. Faux si le point n'est pas sur une zone marchable.
-	bool ProjectToNavMesh(const UObject* WorldContext, const FVector& Point, FVector& OutLocation);
+	// Point de la NavMesh le plus proche du point visé, cherché dans une boîte de demi-taille Extent.
+	// La tolérance par défaut est faible (un clic sur un mur reste refusé) ; les déplacements en prennent une plus large.
+	// Faux si aucun point marchable n'est assez proche.
+	bool ProjectToNavMesh(const UObject* WorldContext, const FVector& Point, FVector& OutLocation, const FVector& Extent = FVector(40.f, 40.f, 150.f));
 
 	// Un point de la NavMesh est-il relié au départ des chemins du camp ? Écarte les îlots de NavMesh
 	// d'où une unité ne pourrait pas descendre (haut des tours, socles).

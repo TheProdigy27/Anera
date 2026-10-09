@@ -15,6 +15,9 @@
 AArenaUnit::AArenaUnit()
 {
 	GetCapsuleComponent()->InitCapsuleSize(35.f, 60.f);
+	// Les unités ne se bloquent pas physiquement entre elles (une unité arrêtée sur un pont barrerait le
+	// passage pour de bon) : l'évitement RVO ci-dessous suffit à les écarter les unes des autres.
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 
 	// Formes simples du moteur, référencées ici pour qu'elles soient incluses dans le jeu packagé.
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
@@ -42,7 +45,7 @@ AArenaUnit::AArenaUnit()
 	Movement->bOrientRotationToMovement = true;
 	Movement->RotationRate = FRotator(0.f, 720.f, 0.f);
 	Movement->bUseRVOAvoidance = true;
-	Movement->AvoidanceConsiderationRadius = 200.f;
+	Movement->AvoidanceConsiderationRadius = 120.f;
 	Movement->BrakingDecelerationFlying = 2000.f;
 }
 
@@ -62,10 +65,19 @@ void AArenaUnit::InitializeUnit(UArenaCardData* InCard, EArenaTeam InTeam, float
 	BaseMoveSpeed = Card->MoveSpeed;
 	UpdateMoveSpeed();
 
+	// Évitement : chaque unité contourne ses alliés, mais pas ses ennemis, qu'elle doit pouvoir rejoindre.
+	FNavAvoidanceMask OwnGroup;
+	OwnGroup.SetGroup(Team == EArenaTeam::J ? 0 : 1);
+	FNavAvoidanceMask EnemyGroup;
+	EnemyGroup.SetGroup(Team == EArenaTeam::J ? 1 : 0);
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	Movement->SetAvoidanceGroupMask(OwnGroup);
+	Movement->SetGroupsToAvoidMask(OwnGroup);
+	Movement->SetGroupsToIgnoreMask(EnemyGroup);
+
 	if (Card->bFlying)
 	{
 		// Une unité volante ignore la NavMesh : elle vole en ligne droite à altitude constante.
-		UCharacterMovementComponent* Movement = GetCharacterMovement();
 		Movement->DefaultLandMovementMode = MOVE_Flying;
 		Movement->GetNavAgentPropertiesRef().bCanFly = true;
 	}

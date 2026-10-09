@@ -85,7 +85,7 @@ namespace ArenaLevel
 		return Point.X >= Bounds.Min.X && Point.X <= Bounds.Max.X && Point.Y >= Bounds.Min.Y && Point.Y <= Bounds.Max.Y;
 	}
 
-	bool ProjectToNavMesh(const UObject* WorldContext, const FVector& Point, FVector& OutLocation)
+	bool ProjectToNavMesh(const UObject* WorldContext, const FVector& Point, FVector& OutLocation, const FVector& Extent)
 	{
 		UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
 		const UNavigationSystemV1* NavSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
@@ -93,9 +93,8 @@ namespace ArenaLevel
 		{
 			return false;
 		}
-		// Petite tolérance à plat (un clic sur un mur reste refusé), plus grande en hauteur (le sol peut être en pente).
 		FNavLocation NavLocation;
-		if (!NavSystem->ProjectPointToNavigation(Point, NavLocation, FVector(40.f, 40.f, 150.f)))
+		if (!NavSystem->ProjectPointToNavigation(Point, NavLocation, Extent))
 		{
 			return false;
 		}

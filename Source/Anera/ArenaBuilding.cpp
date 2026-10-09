@@ -6,11 +6,16 @@
 #include "ArenaHealthComponent.h"
 #include "ArenaLevel.h"
 #include "ArenaProjectile.h"
-#include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+
+namespace
+{
+	// Largeur du socle non marchable autour des bâtiments importés (mesurée dans le niveau : environ 80 uu).
+	constexpr double SocleWidth = 100.0;
+}
 
 AArenaBuilding::AArenaBuilding()
 {
@@ -137,11 +142,12 @@ void AArenaBuilding::GatherLevelActors()
 
 	if (IntactBounds.IsValid)
 	{
-		// Les projectiles visent le bas du bâtiment intact ; son rayon sert si les collisions manquent.
+		// Emprise au sol du bâtiment intact (pour les distances), et point visé dans le bas du bâtiment.
+		// Le socle autour du bâtiment n'est pas marchable et ne fait pas partie de son mesh : l'emprise est
+		// élargie d'autant, sans quoi une unité de mêlée resterait hors de portée au bord du socle.
 		const FVector Center = IntactBounds.GetCenter();
-		const FVector Extent = IntactBounds.GetExtent();
+		Footprint = FBox2D(FVector2D(IntactBounds.Min), FVector2D(IntactBounds.Max)).ExpandBy(SocleWidth);
 		AimPoint = FVector(Center.X, Center.Y, IntactBounds.Min.Z + 0.4f * IntactBounds.GetSize().Z);
-		FallbackRadius = FMath::Min(Extent.X, Extent.Y);
 	}
 	else
 	{
@@ -166,58 +172,26 @@ void AArenaBuilding::ApplyBuildingState()
 	}
 }
 
-void AArenaBuilding::ForEachWallComponent(TFunctionRef<void(const UPrimitiveComponent*)> Visit) const
-{
-	for (const TWeakObjectPtr<AActor>& Weak : StateActors[static_cast<int32>(BuildingState)])
-	{
-		const AStaticMeshActor* MeshActor = Cast<AStaticMeshActor>(Weak.Get());
-		const UStaticMeshComponent* Component = MeshActor ? MeshActor->GetStaticMeshComponent() : nullptr;
-		if (Component && Component->IsCollisionEnabled())
-		{
-			Visit(Component);
-		}
-	}
-}
-
 float AArenaBuilding::GetDistanceToWalls(const FVector& Point) const
 {
-	float Best = TNumericLimits<float>::Max();
-	ForEachWallComponent([&](const UPrimitiveComponent* Component)
-	{
-		FVector Closest;
-		// -1 si la collision n'est pas disponible ; 0 si le point est à l'intérieur.
-		if (Component->GetDistanceToCollision(Point, Closest) >= 0.f)
-		{
-			Best = FMath::Min(Best, static_cast<float>(FVector::Dist2D(Point, Closest)));
-		}
-	});
-	if (Best < TNumericLimits<float>::Max())
-	{
-		return Best;
-	}
-	return FMath::Max(0.f, static_cast<float>(FVector::Dist2D(Point, GetActorLocation())) - FallbackRadius);
+	return static_cast<float>(FVector::Dist2D(Point, GetClosestWallPoint(Point)));
 }
 
 FVector AArenaBuilding::GetClosestWallPoint(const FVector& Point) const
 {
-	float BestDistance = TNumericLimits<float>::Max();
-	FVector BestPoint = FVector::ZeroVector;
-	ForEachWallComponent([&](const UPrimitiveComponent* Component)
+	// Le bâtiment est assimilé à son emprise au sol : un rectangle (ou un cercle autour du slot à défaut).
+	// C'est un calcul simple, identique sur le serveur et les clients, sans requête physique.
+	if (Footprint.bIsValid)
 	{
-		FVector Closest;
-		const float Distance = Component->GetDistanceToCollision(Point, Closest);
-		if (Distance >= 0.f && Distance < BestDistance)
-		{
-			BestDistance = Distance;
-			BestPoint = Closest;
-		}
-	});
-	if (BestDistance < TNumericLimits<float>::Max())
-	{
-		return FVector(BestPoint.X, BestPoint.Y, Point.Z);
+		return FVector(FMath::Clamp(Point.X, Footprint.Min.X, Footprint.Max.X), FMath::Clamp(Point.Y, Footprint.Min.Y, Footprint.Max.Y), Point.Z);
 	}
 	const FVector Center = GetActorLocation();
-	return Center + (Point - Center).GetSafeNormal2D() * FallbackRadius;
+	const FVector ToPoint = FVector(Point.X - Center.X, Point.Y - Center.Y, 0.f);
+	if (ToPoint.Size() <= FallbackRadius)
+	{
+		return Point;
+	}
+	return FVector(Center.X, Center.Y, Point.Z) + ToPoint.GetSafeNormal() * FallbackRadius;
 }
 
 void AArenaBuilding::HandleHealthChanged(UArenaHealthComponent* ChangedHealth, float Damage, AActor* DamageCauser)

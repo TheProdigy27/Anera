@@ -1,4 +1,5 @@
 #include "ArenaUnitAIController.h"
+#include "Anera.h"
 #include "ArenaAttackComponent.h"
 #include "ArenaBuilding.h"
 #include "ArenaCardData.h"
@@ -72,6 +73,7 @@ void AArenaUnitAIController::UpdateBehavior()
 		if (Attack->IsTargetInRange())
 		{
 			StopMovement();
+			ResetProgress(Unit);
 			LastMoveDestination = FVector(TNumericLimits<double>::Max());
 			// Face à la cible : le personnage ne se tourne tout seul que lorsqu'il marche.
 			const FVector ToTarget = Target->GetActorLocation() - Unit->GetActorLocation();
@@ -80,6 +82,7 @@ void AArenaUnitAIController::UpdateBehavior()
 		else
 		{
 			MoveTowardTarget(Unit, Target, Attack->GetStats().Range);
+			CheckProgress(Unit, Target);
 		}
 		return;
 	}
@@ -135,9 +138,36 @@ void AArenaUnitAIController::FollowLane(const AArenaUnit* Unit)
 	if (!LanePath.IsValidIndex(WaypointIndex))
 	{
 		StopMovement();
+		ResetProgress(Unit);
 		return;
 	}
 	IssueMove(Unit, LanePath[WaypointIndex], WaypointReachDistance * 0.5f);
+	CheckProgress(Unit, nullptr);
+}
+
+void AArenaUnitAIController::CheckProgress(const AArenaUnit* Unit, const AActor* Target)
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	const FVector Location = Unit->GetActorLocation();
+	if (FVector::DistSquared2D(Location, ProgressLocation) > FMath::Square(30.f))
+	{
+		ResetProgress(Unit);
+		return;
+	}
+	if (Now - ProgressTime >= 3.0)
+	{
+		UE_LOG(LogArene, Verbose, TEXT("%s n'avance plus en %s : cible %s a %.0f, destination %s, demande %d, suivi %d"),
+			*Unit->GetName(), *Location.ToCompactString(), *GetNameSafe(Target),
+			Target ? ArenaCombat::GetEdgeDistance(Unit, Target) : -1.f, *LastMoveDestination.ToCompactString(),
+			LastMoveResult, static_cast<int32>(GetMoveStatus()));
+		ProgressTime = Now;
+	}
+}
+
+void AArenaUnitAIController::ResetProgress(const AArenaUnit* Unit)
+{
+	ProgressLocation = Unit->GetActorLocation();
+	ProgressTime = GetWorld()->GetTimeSeconds();
 }
 
 void AArenaUnitAIController::ChooseLane(const AArenaUnit* Unit)
@@ -189,10 +219,14 @@ void AArenaUnitAIController::IssueMove(const AArenaUnit* Unit, FVector Destinati
 	{
 		// En vol : ligne droite, à l'altitude actuelle.
 		Destination.Z = Unit->GetActorLocation().Z;
-		MoveToLocation(Destination, AcceptanceRadius, false, false, false, true, nullptr, true);
+		LastMoveResult = static_cast<int32>(MoveToLocation(Destination, AcceptanceRadius, false, false, false, true, nullptr, true));
 	}
 	else
 	{
-		MoveToLocation(Destination, AcceptanceRadius, false, true, true, false, nullptr, true);
+		// Le point visé peut tomber hors de la NavMesh (pied d'un mur, décor sans sol) : on le ramène
+		// nous-mêmes au point marchable le plus proche, avec une tolérance large.
+		FVector Goal = Destination;
+		ArenaLevel::ProjectToNavMesh(this, Destination, Goal, FVector(250.f, 250.f, 300.f));
+		LastMoveResult = static_cast<int32>(MoveToLocation(Goal, AcceptanceRadius, false, true, false, false, nullptr, true));
 	}
 }

@@ -8,7 +8,6 @@
 class AArenaBuilding;
 class UArenaAttackComponent;
 class UArenaHealthComponent;
-class UPrimitiveComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FArenaBuildingDestroyedSignature, AArenaBuilding*, Building);
 
@@ -133,9 +132,6 @@ private:
 	// Montre les acteurs de l'état courant (avec collision), cache les autres (sans collision).
 	void ApplyBuildingState();
 
-	// Collisions des murs visibles.
-	void ForEachWallComponent(TFunctionRef<void(const UPrimitiveComponent*)> Visit) const;
-
 	UFUNCTION()
 	void HandleHealthChanged(UArenaHealthComponent* ChangedHealth, float Damage, AActor* DamageCauser);
 
@@ -149,7 +145,8 @@ private:
 	TArray<TWeakObjectPtr<AActor>> StateActors[3];
 	bool bGathered = false;
 
-	// Mesures du bâtiment intact (à défaut : valeurs approximatives autour du slot).
+	// Mesures du bâtiment intact : emprise au sol et point visé. À défaut, un cercle autour du slot.
+	FBox2D Footprint = FBox2D(ForceInit);
 	FVector AimPoint = FVector::ZeroVector;
 	float FallbackRadius = 120.f;
 
