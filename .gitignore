@@ -1,0 +1,22 @@
+# Dossiers générés par Unreal (reconstruits automatiquement)
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# Fichiers de projet générés pour Visual Studio / VS Code
+.vs/
+.vscode/
+*.sln
+*.slnx
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+*.code-workspace
+
+# Réglages locaux de Claude Code
+.claude/settings.local.json
