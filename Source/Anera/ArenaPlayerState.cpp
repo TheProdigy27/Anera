@@ -39,6 +39,69 @@ bool AArenaPlayerState::SpendElixir(float Cost)
 	return true;
 }
 
+void AArenaPlayerState::InitializeDeck(const TArray<UArenaCardData*>& Cards)
+{
+	check(HasAuthority());
+
+	TArray<UArenaCardData*> Shuffled;
+	for (UArenaCardData* Card : Cards)
+	{
+		if (Card)
+		{
+			Shuffled.Add(Card);
+		}
+	}
+	// Mélange de Fisher-Yates.
+	for (int32 Index = Shuffled.Num() - 1; Index > 0; --Index)
+	{
+		Shuffled.Swap(Index, FMath::RandRange(0, Index));
+	}
+
+	const int32 HandCount = FMath::Min(HandSize, Shuffled.Num());
+	Hand.Reset();
+	DrawPile.Reset();
+	for (int32 Index = 0; Index < Shuffled.Num(); ++Index)
+	{
+		(Index < HandCount ? Hand : DrawPile).Add(Shuffled[Index]);
+	}
+	NextCard = DrawPile.IsEmpty() ? nullptr : DrawPile[0];
+	OnHandChanged.Broadcast();
+}
+
+int32 AArenaPlayerState::FindCardInHand(const UArenaCardData* Card) const
+{
+	for (int32 Index = 0; Index < Hand.Num(); ++Index)
+	{
+		if (Card && Hand[Index] == Card)
+		{
+			return Index;
+		}
+	}
+	return INDEX_NONE;
+}
+
+void AArenaPlayerState::CycleCard(int32 HandIndex)
+{
+	check(HasAuthority());
+	if (!Hand.IsValidIndex(HandIndex) || DrawPile.IsEmpty())
+	{
+		// Deck de 4 cartes ou moins : la carte reste en main.
+		return;
+	}
+
+	UArenaCardData* Played = Hand[HandIndex];
+	Hand[HandIndex] = DrawPile[0];
+	DrawPile.RemoveAt(0);
+	DrawPile.Add(Played);
+	NextCard = DrawPile[0];
+	OnHandChanged.Broadcast();
+}
+
+void AArenaPlayerState::OnRep_Cards()
+{
+	OnHandChanged.Broadcast();
+}
+
 void AArenaPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

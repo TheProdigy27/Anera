@@ -36,6 +36,13 @@ protected:
 
 	AArenaGameState* GetArenaGameState() const;
 
+	// Deck d'un joueur au lancement de la partie.
+	virtual TArray<UArenaCardData*> GetDeckFor(const AArenaPlayerState* Player) const;
+
+	// Deck de chaque joueur tant que l'écran de choix du deck (phase 3) n'existe pas. 8 cartes.
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes")
+	TArray<TObjectPtr<UArenaCardData>> DefaultDeck;
+
 	// Durée du temps réglementaire.
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Partie", meta = (ClampMin = "1", Units = "s"))
 	float MatchDuration = 180.f;

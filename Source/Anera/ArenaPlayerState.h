@@ -7,15 +7,18 @@
 
 class UArenaCardData;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FArenaHandChangedSignature);
+
 // État d'un joueur, répliqué : le camp est visible de tous, l'élixir et les cartes du seul joueur concerné.
 // Seul le serveur modifie ces valeurs (le GameMode pour l'élixir, la pose des cartes pour la main).
-// Squelette : pioche en 1.2.3.
 UCLASS()
 class ANERA_API AArenaPlayerState : public APlayerState
 {
 	GENERATED_BODY()
 
 public:
+	static constexpr int32 HandSize = 4;
+
 	AArenaPlayerState();
 
 	EArenaTeam GetTeam() const { return Team; }
@@ -38,11 +41,24 @@ public:
 	// Serveur uniquement : retire Cost s'il y a assez d'élixir. Renvoie false sinon, sans rien retirer.
 	bool SpendElixir(float Cost);
 
+	// Serveur uniquement : mélange le deck, en tire la main (4 cartes) et la carte suivante.
+	void InitializeDeck(const TArray<UArenaCardData*>& Cards);
+
+	// Position de la carte dans la main, ou INDEX_NONE si elle n'y est pas.
+	int32 FindCardInHand(const UArenaCardData* Card) const;
+
+	// Serveur uniquement : la carte suivante prend la place de la carte jouée, qui retourne sous la pile.
+	void CycleCard(int32 HandIndex);
+
 	UFUNCTION(BlueprintPure, Category = "Arene|Joueur")
 	TArray<UArenaCardData*> GetHand() const { return ObjectPtrDecay(Hand); }
 
 	UFUNCTION(BlueprintPure, Category = "Arene|Joueur")
 	UArenaCardData* GetNextCard() const { return NextCard; }
+
+	// Serveur et propriétaire : la main ou la carte suivante ont changé (pour l'interface).
+	UPROPERTY(BlueprintAssignable, Category = "Arene|Joueur")
+	FArenaHandChangedSignature OnHandChanged;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -58,14 +74,18 @@ protected:
 	UPROPERTY(Replicated, VisibleInstanceOnly, Category = "Arene")
 	float MaxElixir = 10.f;
 
-	// Les 8 cartes du deck, dans l'ordre de la pioche. Connu du serveur seulement.
+	// Les cartes du deck qui ne sont pas en main, dans l'ordre : la première est la carte suivante.
+	// Connue du serveur seulement.
 	UPROPERTY(VisibleInstanceOnly, Category = "Arene")
-	TArray<TObjectPtr<UArenaCardData>> Deck;
+	TArray<TObjectPtr<UArenaCardData>> DrawPile;
 
 	// Les 4 cartes jouables. Répliquées au seul propriétaire : l'adversaire ne voit pas votre main.
-	UPROPERTY(Replicated, VisibleInstanceOnly, Category = "Arene")
+	UPROPERTY(ReplicatedUsing = OnRep_Cards, VisibleInstanceOnly, Category = "Arene")
 	TArray<TObjectPtr<UArenaCardData>> Hand;
 
-	UPROPERTY(Replicated, VisibleInstanceOnly, Category = "Arene")
+	UPROPERTY(ReplicatedUsing = OnRep_Cards, VisibleInstanceOnly, Category = "Arene")
 	TObjectPtr<UArenaCardData> NextCard;
+
+	UFUNCTION()
+	void OnRep_Cards();
 };

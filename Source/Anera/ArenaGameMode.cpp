@@ -116,6 +116,12 @@ void AArenaGameMode::StartMatch()
 		if (AArenaPlayerState* ArenaPlayer = Cast<AArenaPlayerState>(Player))
 		{
 			ArenaPlayer->InitializeElixir(StartElixir, MaxElixir);
+			const TArray<UArenaCardData*> Deck = GetDeckFor(ArenaPlayer);
+			if (Deck.Num() != 8)
+			{
+				UE_LOG(LogArene, Warning, TEXT("Deck de %s : %d cartes au lieu de 8 (DefaultDeck du GameMode)."), *ArenaPlayer->GetPlayerName(), Deck.Num());
+			}
+			ArenaPlayer->InitializeDeck(Deck);
 		}
 	}
 
@@ -127,6 +133,11 @@ void AArenaGameMode::StartMatch()
 AArenaGameState* AArenaGameMode::GetArenaGameState() const
 {
 	return GetGameState<AArenaGameState>();
+}
+
+TArray<UArenaCardData*> AArenaGameMode::GetDeckFor(const AArenaPlayerState* Player) const
+{
+	return ObjectPtrDecay(DefaultDeck);
 }
 
 bool AArenaGameMode::TryPlayCard(AArenaPlayerState* Player, UArenaCardData* Card, const FVector& Location)
