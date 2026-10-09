@@ -28,8 +28,12 @@ namespace ArenaLevel
 	// Point de la NavMesh juste sous le point visé. Faux si le point n'est pas sur une zone marchable.
 	bool ProjectToNavMesh(const UObject* WorldContext, const FVector& Point, FVector& OutLocation);
 
-	// Placement d'une carte : les unités dans la zone de leur camp et sur la NavMesh, les sorts n'importe où.
-	// OutLocation reçoit le point retenu, au sol.
+	// Un point de la NavMesh est-il relié au départ des chemins du camp ? Écarte les îlots de NavMesh
+	// d'où une unité ne pourrait pas descendre (haut des tours, socles).
+	bool IsConnectedToLanes(const UObject* WorldContext, EArenaTeam Team, const FVector& NavLocation);
+
+	// Placement d'une carte : les unités dans la zone de leur camp, sur la NavMesh reliée au terrain,
+	// les sorts n'importe où. OutLocation reçoit le point retenu, au sol.
 	bool IsValidPlacement(const UObject* WorldContext, EArenaTeam Team, const UArenaCardData* Card, const FVector& Point, FVector& OutLocation);
 
 	// Direction d'attaque du camp, à plat : de son fort vers le fort adverse.

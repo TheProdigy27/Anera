@@ -54,14 +54,11 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 		return;
 	}
 
-	UFont* Font = GEngine->GetMediumFont();
-	const float LineHeight = 20.f * Scale;
-	const float X = 16.f * Scale;
-	float Y = 16.f * Scale;
-	auto Line = [&](const FString& Text, const FLinearColor& Color)
+	// Les lignes sont d'abord rassemblées, pour dessiner dessous un fond sombre à leur taille.
+	TArray<TPair<FString, FLinearColor>> Lines;
+	auto Line = [&Lines](const FString& Text, const FLinearColor& Color)
 	{
-		DrawText(Text, Color, X, Y, Font, Scale);
-		Y += LineHeight;
+		Lines.Emplace(Text, Color);
 	};
 
 	// Phase et chrono.
@@ -120,7 +117,7 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 	}
 
 	// PV des bâtiments.
-	Y += LineHeight * 0.5f;
+	Line(FString(), FLinearColor::White);
 	for (TActorIterator<AArenaBuilding> It(GetWorld()); It; ++It)
 	{
 		const AArenaBuilding* Building = *It;
@@ -128,6 +125,26 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 		Line(FString::Printf(TEXT("%s : %.0f / %.0f (%s%s)"), *Building->GetGroup().ToString(), Health->GetHealth(), Health->GetMaxHealth(),
 			StateName(Building->GetBuildingState()), Building->IsActive() ? TEXT("") : TEXT(", endormi")),
 			Building->GetTeam() == EArenaTeam::J ? TeamJColor : TeamAColor);
+	}
+
+	UFont* Font = GEngine->GetMediumFont();
+	const float LineHeight = 20.f * Scale;
+	const float Padding = 8.f * Scale;
+	const float X = 16.f * Scale;
+	float Y = 16.f * Scale;
+	float MaxWidth = 0.f;
+	for (const TPair<FString, FLinearColor>& Entry : Lines)
+	{
+		float Width = 0.f;
+		float Height = 0.f;
+		GetTextSize(Entry.Key, Width, Height, Font, Scale);
+		MaxWidth = FMath::Max(MaxWidth, Width);
+	}
+	DrawRect(PanelColor, X - Padding, Y - Padding, MaxWidth + 2.f * Padding, Lines.Num() * LineHeight + 2.f * Padding);
+	for (const TPair<FString, FLinearColor>& Entry : Lines)
+	{
+		DrawText(Entry.Key, Entry.Value, X, Y, Font, Scale);
+		Y += LineHeight;
 	}
 }
 
@@ -182,7 +199,16 @@ void AArenaHUD::DrawEndBanner(float Scale)
 		Text = Player && Player->GetTeam() == Winner ? TEXT("Victoire !") : TEXT("Défaite");
 	}
 	const FLinearColor Color = Winner == EArenaTeam::J ? TeamJColor : Winner == EArenaTeam::A ? TeamAColor : FLinearColor::White;
-	DrawCenteredText(Text, Color, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.4f, GEngine->GetLargeFont(), Scale * 2.f);
+
+	// Bandeau sombre sur toute la largeur, texte en grand par-dessus.
+	UFont* Font = GEngine->GetLargeFont();
+	const float TextScale = Scale * 3.f;
+	float Width = 0.f;
+	float Height = 0.f;
+	GetTextSize(Text, Width, Height, Font, TextScale);
+	const float CenterY = Canvas->ClipY * 0.4f;
+	DrawRect(PanelColor, 0.f, CenterY - Height, Canvas->ClipX, Height * 2.f);
+	DrawCenteredText(Text, Color, Canvas->ClipX * 0.5f, CenterY, Font, TextScale);
 }
 
 void AArenaHUD::DrawCenteredText(const FString& Text, const FLinearColor& Color, float ScreenX, float ScreenY, UFont* Font, float Scale)
@@ -190,5 +216,9 @@ void AArenaHUD::DrawCenteredText(const FString& Text, const FLinearColor& Color,
 	float Width = 0.f;
 	float Height = 0.f;
 	GetTextSize(Text, Width, Height, Font, Scale);
-	DrawText(Text, Color, ScreenX - Width * 0.5f, ScreenY - Height * 0.5f, Font, Scale);
+	const float Left = ScreenX - Width * 0.5f;
+	const float Top = ScreenY - Height * 0.5f;
+	// Ombre noire décalée d'un pixel : le texte reste lisible sur le décor clair.
+	DrawText(Text, FLinearColor::Black, Left + Scale, Top + Scale, Font, Scale);
+	DrawText(Text, Color, Left, Top, Font, Scale);
 }

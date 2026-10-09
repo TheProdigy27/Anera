@@ -22,6 +22,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|HUD")
 	FLinearColor TeamAColor = FLinearColor(1.f, 0.45f, 0.35f);
 
+	// Fond semi-transparent sous les textes.
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|HUD")
+	FLinearColor PanelColor = FLinearColor(0.f, 0.f, 0.f, 0.6f);
+
 private:
 	void DrawMatchPanel(float Scale);
 	void DrawWorldLabels(float Scale);

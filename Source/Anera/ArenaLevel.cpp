@@ -103,6 +103,27 @@ namespace ArenaLevel
 		return true;
 	}
 
+	bool IsConnectedToLanes(const UObject* WorldContext, EArenaTeam Team, const FVector& NavLocation)
+	{
+		UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
+		UNavigationSystemV1* NavSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+		const ANavigationData* NavData = NavSystem ? NavSystem->GetDefaultNavDataInstance(FNavigationSystem::DontCreate) : nullptr;
+		if (!NavData)
+		{
+			return false;
+		}
+
+		// Sans chemin balisé, on ne peut rien vérifier : le point est accepté.
+		const TArray<FVector> Path = GetLanePath(WorldContext, Team, TEXT("gauche"));
+		FVector Goal;
+		if (Path.IsEmpty() || !ProjectToNavMesh(WorldContext, Path[0], Goal))
+		{
+			return true;
+		}
+		const FPathFindingQuery Query(nullptr, *NavData, NavLocation, Goal);
+		return NavSystem->TestPathSync(Query, EPathFindingMode::Regular);
+	}
+
 	bool IsValidPlacement(const UObject* WorldContext, EArenaTeam Team, const UArenaCardData* Card, const FVector& Point, FVector& OutLocation)
 	{
 		if (!Card)
@@ -114,7 +135,8 @@ namespace ArenaLevel
 			OutLocation = Point;
 			return true;
 		}
-		return IsInDeploymentZone(WorldContext, Team, Point) && ProjectToNavMesh(WorldContext, Point, OutLocation);
+		return IsInDeploymentZone(WorldContext, Team, Point) && ProjectToNavMesh(WorldContext, Point, OutLocation)
+			&& IsConnectedToLanes(WorldContext, Team, OutLocation);
 	}
 
 	FVector GetAttackDirection(const UObject* WorldContext, EArenaTeam Team)

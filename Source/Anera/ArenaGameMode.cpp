@@ -421,10 +421,13 @@ void AArenaGameMode::SpawnUnits(UArenaCardData* Card, EArenaTeam Team, const FVe
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		const FVector Offset = FRotator(0.f, Facing.Yaw + 45.f + 360.f * Index / Count, 0.f).RotateVector(FVector(FormationRadius, 0.f, 0.f));
+		// Au sol, chaque unité doit tomber sur la NavMesh reliée au terrain ; sinon elle apparaît au point visé.
 		FVector Ground = Location + Offset;
-		if (!Card->bFlying && !ArenaLevel::ProjectToNavMesh(this, Ground, Ground))
+		FVector OnNavMesh;
+		if (!Card->bFlying)
 		{
-			Ground = Location;
+			const bool bValid = ArenaLevel::ProjectToNavMesh(this, Ground, OnNavMesh) && ArenaLevel::IsConnectedToLanes(this, Team, OnNavMesh);
+			Ground = bValid ? OnNavMesh : Location;
 		}
 
 		const FTransform SpawnTransform(Facing, Ground + FVector(0.f, 0.f, SpawnHeight));
