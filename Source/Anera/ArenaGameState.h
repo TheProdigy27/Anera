@@ -44,7 +44,8 @@ public:
 	void SetDoubleElixir(bool bEnabled);
 
 	// Serveur : fait jouer un effet visuel (impact, zone de sort) chez tous les joueurs, hôte compris.
-	// Les effets d'une même image partent ensemble, dans un seul RPC envoyé à l'image suivante.
+	// Les effets d'une même image partent ensemble à l'image suivante : un RPC non fiable pour les coups et
+	// les impacts, un RPC fiable pour les sorts.
 	void PlayEffect(const FArenaEffect& Effect);
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -82,12 +83,19 @@ protected:
 
 private:
 	// RPC multicast : appelé sur le serveur, exécuté sur le serveur et chez chaque client.
-	// Unreliable (non fiable) : un paquet perdu n'est pas renvoyé. Cela convient à un effet visuel,
-	// qu'il ne servirait à rien d'afficher en retard.
+	// Unreliable (non fiable) : un paquet perdu n'est pas renvoyé. Cela convient aux coups et aux impacts,
+	// fréquents et brefs, qu'il ne servirait à rien d'afficher en retard.
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayEffects(const TArray<FArenaEffect>& Effects);
 
+	// Les sorts passent par un RPC fiable (Reliable), renvoyé jusqu'à ce qu'il arrive. Leur zone reste au sol
+	// et accompagne un effet de jeu (ralentissement, dégâts sur plusieurs unités) : son absence se verrait.
+	// Ils sont rares, et les renvois ne coûtent presque rien.
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlaySpellEffects(const TArray<FArenaEffect>& Effects);
+
 	void SendPendingEffects();
+	void SpawnEffects(const TArray<FArenaEffect>& Effects);
 
 	TArray<FArenaEffect> PendingEffects;
 	bool bEffectSendScheduled = false;

@@ -133,7 +133,8 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 		const bool bTeamJ = Player->GetTeam() == EArenaTeam::J;
 		Line(FString::Printf(TEXT("Vous jouez le camp %s"), bTeamJ ? TEXT("J") : TEXT("A")), bTeamJ ? TeamJColor : TeamAColor);
 
-		const float Elixir = Player->GetElixir();
+		// Cartes envoyées au serveur comprises : leur coût est déjà déduit, en attendant sa réponse.
+		const float Elixir = Controller->GetAvailableElixir();
 		const int32 Max = FMath::RoundToInt(Player->GetMaxElixir());
 		const int32 Full = FMath::FloorToInt(Elixir);
 		const FString Bar = FString::ChrN(Full, TEXT('#')) + FString::ChrN(FMath::Max(0, Max - Full), TEXT('.'));
@@ -148,10 +149,11 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 				continue;
 			}
 			const bool bSelected = Controller->GetSelectedHandSlot() == Index;
-			const bool bAffordable = Elixir >= Card->ElixirCost;
+			const bool bPending = Controller->IsCardPending(Card);
+			const bool bAffordable = !bPending && Elixir >= Card->ElixirCost;
 			const FLinearColor Color = bSelected ? FLinearColor::Yellow : bAffordable ? FLinearColor::White : FLinearColor::Gray;
-			Line(FString::Printf(TEXT("%s[%d] %s (%d)"), bSelected ? TEXT("> ") : TEXT("  "), Index + 1,
-				*Card->DisplayName.ToString(), Card->ElixirCost), Color);
+			Line(FString::Printf(TEXT("%s[%d] %s (%d)%s"), bSelected ? TEXT("> ") : TEXT("  "), Index + 1,
+				*Card->DisplayName.ToString(), Card->ElixirCost, bPending ? TEXT(" : envoyée…") : TEXT("")), Color);
 		}
 		if (const UArenaCardData* Next = Player->GetNextCard())
 		{

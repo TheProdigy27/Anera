@@ -104,6 +104,14 @@ void AArenaPlayerState::CycleCard(int32 HandIndex)
 	OnHandChanged.Broadcast();
 }
 
+void AArenaPlayerState::ConfirmCardRequest(int32 RequestId)
+{
+	check(HasAuthority());
+	LastCardRequestId = FMath::Max(LastCardRequestId, RequestId);
+	// Sans attendre la prochaine mise à jour du PlayerState (10 par seconde) : le joueur attend la réponse.
+	ForceNetUpdate();
+}
+
 void AArenaPlayerState::OnRep_Cards()
 {
 	OnHandChanged.Broadcast();
@@ -118,4 +126,5 @@ void AArenaPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION(AArenaPlayerState, MaxElixir, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(AArenaPlayerState, Hand, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(AArenaPlayerState, NextCard, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AArenaPlayerState, LastCardRequestId, COND_OwnerOnly);
 }

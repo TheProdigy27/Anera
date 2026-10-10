@@ -12,8 +12,19 @@
 #include "ArenaPlayerState.h"
 #include "ArenaUnit.h"
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
+
+namespace
+{
+	// Variable de console : modifiable pendant le jeu, et lue ici au début de la partie.
+	TAutoConsoleVariable<bool> CVarDemoMode(
+		TEXT("Arene.Demo"),
+		false,
+		TEXT("Arene.Demo 1 : une IA joue à la place de chaque joueur humain dans les parties qui commencent ensuite ")
+		TEXT("(comme bDemoMode du GameMode, sans toucher au Blueprint)."));
+}
 
 AArenaGameMode::AArenaGameMode()
 {
@@ -374,7 +385,7 @@ void AArenaGameMode::SpawnAIOpponents()
 		SpawnAIOpponent(EArenaTeam::A, nullptr);
 	}
 
-	if (bDemoMode)
+	if (bDemoMode || CVarDemoMode.GetValueOnGameThread())
 	{
 		for (APlayerState* Player : HumanPlayers)
 		{

@@ -104,7 +104,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 - [x] **2.3** Interpolation des déplacements des unités côté client (CharacterMovement répliqué), réplication des projectiles et des effets d'impact.
 - [x] **2.4** Connexion par IP pour commencer : menu « Héberger » (`open <Map>?listen`) et « Rejoindre » (`open <IP>`). Port 7777 à ouvrir sur la box de l'hôte.
 - [x] **2.5** Ensuite, connexion sans ouvrir de ports : Epic Online Services (sessions et relais P2P, gratuit), ou Steam si tout le monde l'utilise. Vérifier la documentation de la version d'UE installée avant de choisir.
-- [ ] **2.6** Test avec latence simulée (`Net PktLag=100`, `Net PktLoss=2`) et entre 2 PC réels. Avec Steam, il faut deux comptes Steam différents (voir le Journal, 2.5).
+- [ ] **2.6** Test avec latence simulée (`Net PktLag=100`, `Net PktLoss=2`) et entre 2 PC réels. Avec Steam, il faut deux comptes Steam différents (voir le Journal, 2.5). *Latence simulée : faite (Journal, 2.6). Reste le test entre 2 PC.*
 
 **Terminé quand** : deux PC jouent une partie complète, sans désynchronisation visible.
 
@@ -359,3 +359,29 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - hors éditeur, un log par processus avec `-abslog=<chemin>` ;
     - un processus `-game` arrêté de force laisse `steam_appid.txt` dans `Engine/Binaries/Win64` (supprimé ici) ;
     - réglages PIE remis comme au début de la session (Standalone, 1 joueur), arène ouverte.
+- 2026-10-10 — 2.6 commencée : tests avec latence simulée, deux correctifs. Le test entre deux PC réels reste à faire (case non cochée).
+  - Conditions : PIE en Listen Server à 2 joueurs, avec l'émulation réseau de l'éditeur sur les deux machines (cible « Any » : 100 ms et 2 % de pertes à l'envoi, soit environ 200 ms d'aller-retour). Cela revient à taper `Net PktLag=100` et `Net PktLoss=2` sur chaque machine.
+  - Résultats, sur deux parties complètes en mode démo :
+    - l'état final est identique sur le serveur et le client : phase, couronnes, vainqueur, état et PV des 6 bâtiments ;
+    - déplacements (`Arene.MesureMouvement 20`, 7 puis 11 unités) : le visuel du client a 0,74 % puis 0,61 % d'images avec à-coup (serveur : 0,26 % puis 0,19 %), et l'écart visuel–capsule ne dépasse pas 7 uu ;
+    - effets : ils arrivent chez le client 105 à 118 ms après le serveur. Avant correctif, 11 envois sur 278 étaient perdus (4 %), toujours des envois entiers et au hasard : la limite de 2 RPC par mise à jour n'y est pour rien. Après correctif, 3 impacts sur 213 sont perdus (1,4 %), et les 3 sorts sur 3 sont arrivés ;
+    - une carte posée par le client arrive au serveur en 117 ms, et la réponse revient au client en 225 à 228 ms ;
+    - aucun avertissement ni erreur du jeu dans le log.
+  - Correctifs :
+    - Les effets de sort passent par un multicast fiable (`MulticastPlaySpellEffects`). Sinon, un Mur de ronces dont l'envoi se perdait ralentissait les unités sans zone visible. Les coups et les impacts restent non fiables.
+    - Pose d'une carte en réseau. Pendant l'aller-retour, la carte restait en main et l'élixir n'avait pas baissé chez le client : il pouvait renvoyer la même carte ou dépenser deux fois le même élixir, et le serveur refusait sans rien dire. Maintenant :
+      - `ServerPlayCard` porte un numéro de demande. Le serveur renvoie le dernier numéro traité (`AArenaPlayerState::LastCardRequestId`, envoyé au seul propriétaire) dans la même mise à jour que la main et l'élixir, et force l'envoi (`ForceNetUpdate`) ;
+      - en attendant, la carte est marquée « envoyée… » dans le HUD et ne peut pas être rejouée. Son coût est déjà déduit de l'élixir affiché (`AArenaPlayerController::GetAvailableElixir`, à utiliser par le HUD en 3.1), et un disque blanc marque l'endroit visé. Une demande sans réponse est abandonnée au bout de 5 s ;
+      - chez l'hôte, la RPC s'exécute sur-le-champ : rien n'est mis en attente.
+    - Vérifié en PIE : la même carte posée deux fois dans la même image, la seconde est refusée chez le client ; trois cartes d'affilée, la troisième est refusée faute d'élixir et le serveur accepte les deux premières ; chez l'hôte, deux poses de suite passent tout de suite.
+  - Outil de test : la variable de console `Arene.Demo 1`, lue au début de la partie, active le mode démo sans modifier `BP_ArenaGameMode`. `AdditionalServerGameOptions` des réglages PIE ne convient pas : en UE 5.8, il ne sert qu'au PIE en processus séparé.
+  - Outillage :
+    - en-têtes modifiés (Live Coding ne suffit pas) : `QUIT_EDITOR` dans la console de l'éditeur, `Build.bat`, puis relance de l'éditeur ;
+    - émulation réseau : `NetworkEmulationSettings` sur `/Script/UnrealEd.Default__LevelEditorPlaySettings` ;
+    - la console de l'éditeur accepte plusieurs commandes séparées par `|`, exécutées dans la même image ;
+    - comparaison des effets : avec `LogArene` en `VeryVerbose`, chaque effet joué est écrit dans le log avec sa machine. L'analyse a été faite par un script ponctuel, hors dépôt ;
+    - réglages remis comme au début de la session : Standalone, 1 joueur, émulation coupée, bridage en arrière-plan rétabli, `Arene.Demo 0`.
+  - Reste à faire pour cocher 2.6, une partie entre deux PC :
+    - deux comptes Steam, Steam lancé des deux côtés, la même version du jeu sur les deux PC (il faut un build pour le second PC) ;
+    - à vérifier : chrono, couronnes et PV identiques sur les deux écrans, cartes de l'invité posées sans attente visible, pas d'unité qui saute, zone du Mur de ronces visible des deux côtés, départ puis retour de l'invité, invitation Steam ;
+    - en build Development, la console (touche `²` ou `~`) permet `stat net` (ping, pertes) et `Arene.MesureMouvement 20` chez l'invité.

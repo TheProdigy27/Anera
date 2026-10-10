@@ -60,6 +60,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Arene|Joueur")
 	UArenaCardData* GetNextCard() const { return NextCard; }
 
+	// Numéro de la dernière demande de pose de carte traitée par le serveur, acceptée ou refusée.
+	int32 GetLastCardRequestId() const { return LastCardRequestId; }
+
+	// Serveur uniquement : la demande RequestId du joueur est traitée. Main, élixir et numéro partent tout de suite.
+	void ConfirmCardRequest(int32 RequestId);
+
 	// Serveur et propriétaire : la main ou la carte suivante ont changé (pour l'interface).
 	UPROPERTY(BlueprintAssignable, Category = "Arene|Joueur")
 	FArenaHandChangedSignature OnHandChanged;
@@ -89,6 +95,11 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Cards, VisibleInstanceOnly, Category = "Arene")
 	TObjectPtr<UArenaCardData> NextCard;
+
+	// Répliqué au seul propriétaire, dans la même mise à jour que la main et l'élixir : quand le client voit
+	// ce numéro passer, sa main et son élixir tiennent déjà compte de la carte (voir AArenaPlayerController).
+	UPROPERTY(Replicated, VisibleInstanceOnly, Category = "Arene")
+	int32 LastCardRequestId = 0;
 
 	UFUNCTION()
 	void OnRep_Cards();

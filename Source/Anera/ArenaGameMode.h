@@ -146,6 +146,7 @@ protected:
 	TSubclassOf<AArenaAIOpponent> AIOpponentClass;
 
 	// Test : une IA joue à la place de chaque joueur humain (partie IA contre IA à regarder, en solo ou en réseau).
+	// Aussi activé par la commande console « Arene.Demo 1 » avant le début de la partie, sans toucher au Blueprint.
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Partie")
 	bool bDemoMode = false;
 

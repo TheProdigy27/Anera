@@ -59,16 +59,61 @@ void AArenaPlayerController::PlayerTick(float DeltaTime)
 
 	// PlayerTick ne tourne que sur la machine du joueur local : chacun gère sa propre caméra et sa prévisualisation.
 	UpdateArenaCamera();
+	UpdatePendingCardPlays();
 	HandleCardInput();
 	UpdatePlacementPreview();
 }
 
-void AArenaPlayerController::ServerPlayCard_Implementation(UArenaCardData* Card, FVector_NetQuantize Location)
+void AArenaPlayerController::ServerPlayCard_Implementation(UArenaCardData* Card, FVector_NetQuantize Location, int32 RequestId)
 {
+	AArenaPlayerState* State = GetArenaPlayerState();
 	if (AArenaGameMode* GameMode = GetWorld()->GetAuthGameMode<AArenaGameMode>())
 	{
-		GameMode->TryPlayCard(GetArenaPlayerState(), Card, Location);
+		GameMode->TryPlayCard(State, Card, Location);
 	}
+	// Acceptée ou refusée, la demande est traitée : le joueur l'apprend avec sa main et son élixir à jour.
+	if (State)
+	{
+		State->ConfirmCardRequest(RequestId);
+	}
+}
+
+float AArenaPlayerController::GetAvailableElixir() const
+{
+	const AArenaPlayerState* State = GetArenaPlayerState();
+	float Elixir = State ? State->GetElixir() : 0.f;
+	for (const FArenaPendingCardPlay& Pending : PendingCardPlays)
+	{
+		Elixir -= Pending.Card ? Pending.Card->ElixirCost : 0.f;
+	}
+	return FMath::Max(0.f, Elixir);
+}
+
+bool AArenaPlayerController::IsCardPending(const UArenaCardData* Card) const
+{
+	return Card && PendingCardPlays.ContainsByPredicate([Card](const FArenaPendingCardPlay& Pending) { return Pending.Card == Card; });
+}
+
+void AArenaPlayerController::UpdatePendingCardPlays()
+{
+	const AArenaPlayerState* State = GetArenaPlayerState();
+	const int32 LastHandled = State ? State->GetLastCardRequestId() : 0;
+	const double Now = FPlatformTime::Seconds();
+	PendingCardPlays.RemoveAll([&](const FArenaPendingCardPlay& Pending)
+	{
+		const bool bAnswered = Pending.RequestId <= LastHandled;
+		if (!bAnswered && Now - Pending.SendTime < PendingCardTimeout)
+		{
+			return false;
+		}
+		UE_LOG(LogArene, Verbose, TEXT("Carte %s : %s au bout de %.0f ms"), *GetNameSafe(Pending.Card),
+			bAnswered ? TEXT("reponse du serveur") : TEXT("pas de reponse, abandon"), (Now - Pending.SendTime) * 1000.0);
+		if (Pending.Marker)
+		{
+			Pending.Marker->Destroy();
+		}
+		return true;
+	});
 }
 
 void AArenaPlayerController::SelectHandSlot(int32 HandIndex)
@@ -107,11 +152,27 @@ bool AArenaPlayerController::TryPlayCardAt(int32 HandIndex, const FVector& Point
 		return false;
 	}
 	FVector GroundLocation;
-	if (State->GetElixir() < Card->ElixirCost || !ArenaLevel::IsValidPlacement(this, State->GetTeam(), Card, Point, GroundLocation))
+	if (IsCardPending(Card) || GetAvailableElixir() < Card->ElixirCost
+		|| !ArenaLevel::IsValidPlacement(this, State->GetTeam(), Card, Point, GroundLocation))
 	{
 		return false;
 	}
-	ServerPlayCard(Card, Point);
+
+	// Après une reconnexion, le PlayerState garde le dernier numéro traité : on repart au-delà.
+	LastSentCardRequestId = FMath::Max(LastSentCardRequestId, State->GetLastCardRequestId()) + 1;
+	const int32 RequestId = LastSentCardRequestId;
+	const double SendTime = FPlatformTime::Seconds();
+	ServerPlayCard(Card, Point, RequestId);
+
+	// Sur l'hôte, la RPC s'est exécutée sur-le-champ : la réponse est déjà là. Sinon, la carte attend la réponse.
+	if (State->GetLastCardRequestId() < RequestId)
+	{
+		FArenaPendingCardPlay& Pending = PendingCardPlays.AddDefaulted_GetRef();
+		Pending.RequestId = RequestId;
+		Pending.Card = Card;
+		Pending.SendTime = SendTime;
+		Pending.Marker = SpawnPlacementDisc(Card, GroundLocation, PendingPreviewColor);
+	}
 	return true;
 }
 
@@ -200,36 +261,49 @@ void AArenaPlayerController::UpdatePlacementPreview()
 		return;
 	}
 
+	FVector GroundLocation = CursorLocation;
+	const bool bValid = !IsCardPending(Card) && GetAvailableElixir() >= Card->ElixirCost
+		&& ArenaLevel::IsValidPlacement(this, State->GetTeam(), Card, CursorLocation, GroundLocation);
+	const FLinearColor& Color = bValid ? ValidPreviewColor : InvalidPreviewColor;
+
 	if (!PreviewActor)
 	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.ObjectFlags |= RF_Transient;
-		PreviewActor = GetWorld()->SpawnActor<AStaticMeshActor>(CursorLocation, FRotator::ZeroRotator, SpawnParams);
-		if (!PreviewActor)
-		{
-			return;
-		}
-		PreviewActor->SetReplicates(false);
-		PreviewActor->SetActorEnableCollision(false);
-		UStaticMeshComponent* MeshComponent = PreviewActor->GetStaticMeshComponent();
-		MeshComponent->SetMobility(EComponentMobility::Movable);
-		MeshComponent->SetStaticMesh(PreviewMesh);
-		MeshComponent->SetCastShadow(false);
-		PreviewMaterialInstance = MeshComponent->CreateDynamicMaterialInstance(0, PreviewMaterial);
+		PreviewActor = SpawnPlacementDisc(Card, GroundLocation, Color);
+		return;
 	}
+	PlaceDisc(PreviewActor, Card, GroundLocation, Color);
+	PreviewActor->SetActorHiddenInGame(false);
+}
 
-	FVector GroundLocation = CursorLocation;
-	const bool bValid = State->GetElixir() >= Card->ElixirCost
-		&& ArenaLevel::IsValidPlacement(this, State->GetTeam(), Card, CursorLocation, GroundLocation);
+AStaticMeshActor* AArenaPlayerController::SpawnPlacementDisc(const UArenaCardData* Card, const FVector& GroundLocation, const FLinearColor& Color)
+{
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.ObjectFlags |= RF_Transient;
+	AStaticMeshActor* Disc = GetWorld()->SpawnActor<AStaticMeshActor>(GroundLocation, FRotator::ZeroRotator, SpawnParams);
+	if (!Disc)
+	{
+		return nullptr;
+	}
+	Disc->SetReplicates(false);
+	Disc->SetActorEnableCollision(false);
+	UStaticMeshComponent* MeshComponent = Disc->GetStaticMeshComponent();
+	MeshComponent->SetMobility(EComponentMobility::Movable);
+	MeshComponent->SetStaticMesh(PreviewMesh);
+	MeshComponent->SetCastShadow(false);
+	MeshComponent->CreateDynamicMaterialInstance(0, PreviewMaterial);
+	PlaceDisc(Disc, Card, GroundLocation, Color);
+	return Disc;
+}
 
+void AArenaPlayerController::PlaceDisc(AStaticMeshActor* Disc, const UArenaCardData* Card, const FVector& GroundLocation, const FLinearColor& Color)
+{
 	// Disque plat : rayon du sort, ou place occupée par les unités.
 	const float Radius = Card->CardType == EArenaCardType::Spell ? Card->SpellRadius : (Card->UnitCount > 1 ? 90.f : 50.f);
-	PreviewActor->SetActorLocation(GroundLocation + FVector(0.f, 0.f, 3.f));
-	PreviewActor->SetActorScale3D(FVector(Radius / 50.f, Radius / 50.f, 0.04f));
-	PreviewActor->SetActorHiddenInGame(false);
-	if (PreviewMaterialInstance)
+	Disc->SetActorLocation(GroundLocation + FVector(0.f, 0.f, 3.f));
+	Disc->SetActorScale3D(FVector(Radius / 50.f, Radius / 50.f, 0.04f));
+	if (UMaterialInstanceDynamic* Material = Cast<UMaterialInstanceDynamic>(Disc->GetStaticMeshComponent()->GetMaterial(0)))
 	{
-		PreviewMaterialInstance->SetVectorParameterValue(TEXT("Color"), bValid ? ValidPreviewColor : InvalidPreviewColor);
+		Material->SetVectorParameterValue(TEXT("Color"), Color);
 	}
 }
 
@@ -250,6 +324,14 @@ void AArenaPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		PreviewActor->Destroy();
 		PreviewActor = nullptr;
 	}
+	for (const FArenaPendingCardPlay& Pending : PendingCardPlays)
+	{
+		if (Pending.Marker)
+		{
+			Pending.Marker->Destroy();
+		}
+	}
+	PendingCardPlays.Reset();
 	Super::EndPlay(EndPlayReason);
 }
 

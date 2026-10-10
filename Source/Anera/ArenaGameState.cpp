@@ -89,15 +89,37 @@ void AArenaGameState::SendPendingEffects()
 	}
 	// Un seul RPC pour tous les effets en attente : le moteur ne laisse passer que 2 appels d'un même
 	// multicast non fiable par mise à jour réseau d'un acteur (net.MaxRPCPerNetUpdate), les suivants sont perdus.
-	const TArray<FArenaEffect> Effects = MoveTemp(PendingEffects);
+	TArray<FArenaEffect> Effects;
+	TArray<FArenaEffect> SpellEffects;
+	for (FArenaEffect& Effect : PendingEffects)
+	{
+		(Effect.Type == EArenaEffectType::Spell ? SpellEffects : Effects).Add(MoveTemp(Effect));
+	}
 	PendingEffects.Reset();
-	MulticastPlayEffects(Effects);
+	if (!Effects.IsEmpty())
+	{
+		MulticastPlayEffects(Effects);
+	}
+	if (!SpellEffects.IsEmpty())
+	{
+		MulticastPlaySpellEffects(SpellEffects);
+	}
 	// Un multicast non fiable part avec la prochaine mise à jour réseau de l'acteur, et le GameState
 	// n'en a que 10 par seconde : on la demande tout de suite pour ne pas retarder les effets.
 	ForceNetUpdate();
 }
 
 void AArenaGameState::MulticastPlayEffects_Implementation(const TArray<FArenaEffect>& Effects)
+{
+	SpawnEffects(Effects);
+}
+
+void AArenaGameState::MulticastPlaySpellEffects_Implementation(const TArray<FArenaEffect>& Effects)
+{
+	SpawnEffects(Effects);
+}
+
+void AArenaGameState::SpawnEffects(const TArray<FArenaEffect>& Effects)
 {
 	for (const FArenaEffect& Effect : Effects)
 	{
