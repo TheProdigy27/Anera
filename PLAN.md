@@ -100,7 +100,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 ## Phase 2 — Multijoueur à 2 (listen server)
 
 - [x] **2.1** Tester le code de la phase 1 avec 2 joueurs en PIE : Net Mode « Play As Listen Server », 2 joueurs. Corriger tout ce qui n'est pas répliqué.
-- [ ] **2.2** Le premier connecté joue le camp J (hôte), le second le camp A. Caméra retournée pour A, chaque joueur ne peut déployer que dans sa zone.
+- [x] **2.2** Le premier connecté joue le camp J (hôte), le second le camp A. Caméra retournée pour A, chaque joueur ne peut déployer que dans sa zone.
 - [ ] **2.3** Interpolation des déplacements des unités côté client (CharacterMovement répliqué), réplication des projectiles et des effets d'impact.
 - [ ] **2.4** Connexion par IP pour commencer : menu « Héberger » (`open <Map>?listen`) et « Rejoindre » (`open <IP>`). Port 7777 à ouvrir sur la box de l'hôte.
 - [ ] **2.5** Ensuite, connexion sans ouvrir de ports : Epic Online Services (sessions et relais P2P, gratuit), ou Steam si tout le monde l'utilise. Vérifier la documentation de la version d'UE installée avant de choisir.
@@ -246,3 +246,11 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - le module n'a été recompilé que par Live Coding : l'éditeur proposera de le recompiler au prochain lancement ;
     - un 3e joueur qui se connecterait recevrait le camp A : à refuser en 2.2 (le reste de 2.2 est déjà en place et vérifié) ;
     - le trou de NavMesh d'une tour reste après sa destruction (NavMesh statique) : à revoir si l'emplacement d'une ruine doit devenir praticable.
+- 2026-10-10 — 2.2 faite. J pour l'hôte, A pour le second joueur, caméra retournée pour A et zone de déploiement propre à chaque joueur : tout était déjà en place, et vérifié en 2.1.
+  - Ajout : un 3e joueur est refusé avec le message « La partie est complète (2 joueurs). ».
+    - `PreLogin` le refuse tôt, et `Login` refait le contrôle. En PIE à 3 joueurs, les deux clients passaient `PreLogin` en même temps, avant d'avoir un PlayerState, et recevaient tous deux le camp A.
+    - Les PlayerStates de robot (IA du solo) ne comptent pas.
+  - Vérifié en PIE à 3 joueurs : l'hôte est J, le client 1 est A, et le client 2 est refusé.
+  - Faute de menu, le joueur refusé revient à la carte par défaut (l'arène, en solo contre l'IA). En phase 3, il reviendra au menu avec le message.
+  - Le module est recompilé avec `Build.bat` (éditeur fermé, puis relancé) : la DLL contient aussi les changements faits par Live Coding en 2.1.
+  - Problème ouvert : un joueur qui revient en cours de partie (après une déconnexion) prendrait le camp libre, mais sans élixir ni deck, distribués au seul lancement de la partie. À traiter avec la connexion par IP (2.4).

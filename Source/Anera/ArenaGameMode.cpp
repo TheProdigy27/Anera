@@ -129,6 +129,47 @@ void AArenaGameMode::HandleBuildingDestroyed(AArenaBuilding* Building)
 	}
 }
 
+namespace
+{
+	// Message renvoyé au joueur refusé (affiché par l'interface de la phase 3).
+	const TCHAR* ArenaFullMessage = TEXT("La partie est complète (2 joueurs).");
+}
+
+bool AArenaGameMode::IsFull() const
+{
+	int32 HumanPlayers = 0;
+	for (const APlayerState* Player : GameState->PlayerArray)
+	{
+		if (Player && !Player->IsABot())
+		{
+			++HumanPlayers;
+		}
+	}
+	return HumanPlayers >= 2;
+}
+
+void AArenaGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+	if (ErrorMessage.IsEmpty() && IsFull())
+	{
+		ErrorMessage = ArenaFullMessage;
+		UE_LOG(LogArene, Log, TEXT("Connexion de %s refusee : partie complete"), *Address);
+	}
+}
+
+APlayerController* AArenaGameMode::Login(UPlayer* NewPlayer, ENetRole InRemoteRole, const FString& Portal, const FString& Options,
+	const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	if (IsFull())
+	{
+		ErrorMessage = ArenaFullMessage;
+		UE_LOG(LogArene, Log, TEXT("Entree de %s refusee : partie complete"), *UGameplayStatics::ParseOption(Options, TEXT("Name")));
+		return nullptr;
+	}
+	return Super::Login(NewPlayer, InRemoteRole, Portal, Options, UniqueId, ErrorMessage);
+}
+
 void AArenaGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);

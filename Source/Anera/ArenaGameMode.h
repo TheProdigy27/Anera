@@ -23,6 +23,13 @@ public:
 
 	// Appelée quand le monde commence à jouer (avant les BeginPlay des acteurs du niveau).
 	virtual void StartPlay() override;
+
+	// L'arène se joue à 2 : un troisième joueur est refusé (un ErrorMessage non vide refuse la connexion).
+	// PreLogin, appelée avant le chargement de la carte chez le client, le refuse tôt. Login refait le contrôle :
+	// deux clients qui se connectent en même temps passent tous deux PreLogin avant d'avoir un PlayerState.
+	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
+	virtual APlayerController* Login(UPlayer* NewPlayer, ENetRole InRemoteRole, const FString& Portal, const FString& Options,
+		const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -31,6 +38,9 @@ public:
 	bool TryPlayCard(AArenaPlayerState* Player, UArenaCardData* Card, const FVector& Location);
 
 protected:
+	// Vrai quand 2 joueurs humains sont déjà là (les IA du solo, des robots, ne comptent pas).
+	bool IsFull() const;
+
 	// Fait apparaître un AArenaBuilding sur chaque SLOT_Tour_* et SLOT_Fort_* du niveau.
 	void SpawnBuildings();
 
