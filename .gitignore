@@ -5,6 +5,8 @@ Saved/
 DerivedDataCache/
 Plugins/**/Binaries/
 Plugins/**/Intermediate/
+# Ordre de lecture des fichiers, réécrit à chaque packaging
+Build/**/FileOpenOrder/
 
 # Fichiers de projet générés pour Visual Studio / VS Code
 .vs/
