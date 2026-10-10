@@ -1,6 +1,8 @@
 #include "ArenaGameState.h"
 #include "Anera.h"
 #include "ArenaEffectMarker.h"
+#include "ArenaSessionSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
@@ -30,6 +32,11 @@ void AArenaGameState::SetMatchPhase(EArenaMatchPhase NewPhase, float Duration)
 	check(HasAuthority());
 	MatchPhase = NewPhase;
 	PhaseEndTime = Duration > 0.f ? GetServerWorldTimeSeconds() + Duration : 0.0;
+	// Partie annoncée en ligne : la phase est publiée avec la session (une partie terminée n'est plus proposée).
+	if (UArenaSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UArenaSessionSubsystem>())
+	{
+		Sessions->SetHostedMatchPhase(NewPhase);
+	}
 }
 
 void AArenaGameState::AddCrowns(EArenaTeam Team, int32 Count)

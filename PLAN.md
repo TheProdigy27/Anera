@@ -103,8 +103,8 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 - [x] **2.2** Le premier connecté joue le camp J (hôte), le second le camp A. Caméra retournée pour A, chaque joueur ne peut déployer que dans sa zone.
 - [x] **2.3** Interpolation des déplacements des unités côté client (CharacterMovement répliqué), réplication des projectiles et des effets d'impact.
 - [x] **2.4** Connexion par IP pour commencer : menu « Héberger » (`open <Map>?listen`) et « Rejoindre » (`open <IP>`). Port 7777 à ouvrir sur la box de l'hôte.
-- [ ] **2.5** Ensuite, connexion sans ouvrir de ports : Epic Online Services (sessions et relais P2P, gratuit), ou Steam si tout le monde l'utilise. Vérifier la documentation de la version d'UE installée avant de choisir.
-- [ ] **2.6** Test avec latence simulée (`Net PktLag=100`, `Net PktLoss=2`) et entre 2 PC réels.
+- [x] **2.5** Ensuite, connexion sans ouvrir de ports : Epic Online Services (sessions et relais P2P, gratuit), ou Steam si tout le monde l'utilise. Vérifier la documentation de la version d'UE installée avant de choisir.
+- [ ] **2.6** Test avec latence simulée (`Net PktLag=100`, `Net PktLoss=2`) et entre 2 PC réels. Avec Steam, il faut deux comptes Steam différents (voir le Journal, 2.5).
 
 **Terminé quand** : deux PC jouent une partie complète, sans désynchronisation visible.
 
@@ -153,7 +153,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 ---
 
 ## Phase 6 — Distribution
-- [ ] Packager en Windows Shipping (Platforms > Windows > Package Project) et tester l'exécutable hors éditeur.
+- [ ] Packager en Windows Shipping (Platforms > Windows > Package Project) et tester l'exécutable hors éditeur. Steam (App ID 480) : en Shipping, le moteur n'écrit plus `steam_appid.txt`, il faut le livrer à côté de l'exécutable (`Binaries/Win64/steam_appid.txt`, contenu `480`), sinon Steam ne s'initialise pas et le jeu passe en réseau local.
 - [ ] Distribuer en zip ou sur une page itch.io privée accessible par lien. Prévoir un numéro de version affiché dans le menu et un moyen simple de diffuser les mises à jour.
 
 ---
@@ -310,3 +310,52 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - `SM_Collisions_Arene` a un petit trou (moins de 70 uu) devant chacune des 4 tours, vers (±550, ±700) : un clic à cet endroit ne pose rien. C'est le trou déjà repéré devant la tour droite de A en phase 1, présent en fait aux 4 tours. À corriger dans Blender.
     - Jouer par Internet demande à l'hôte de rediriger le port 7777 (UDP) de sa box vers son PC, d'autoriser le jeu dans le pare-feu Windows et de donner son IP publique (le jeu n'affiche que l'adresse locale). Pas encore testé entre deux PC (2.6).
     - Le menu sera complété en 3.4 : Deck, écran de fin avec Rejouer, habillage.
+- 2026-10-10 — 2.5 faite : parties en ligne par Steam (App ID de test 480, « Spacewar »), sans port à ouvrir. Sans Steam, le même code passe par le réseau local.
+  - Choix : Steam plutôt qu'Epic Online Services, puisque tous les joueurs ont Steam. UE 5.8 fournit `OnlineSubsystemSteam` (une partie = un lobby Steam), `SteamSockets` (pilote réseau qui passe par le relais de Valve, en P2P) et le SDK Steamworks 1.64.
+    - Plugins `OnlineSubsystemSteam` et `SteamSockets` activés dans `Anera.uproject`.
+    - Modules `OnlineSubsystem` et `OnlineSubsystemUtils` ajoutés dans `Anera.Build.cs`.
+  - Configuration (`DefaultEngine.ini`) :
+    - `DefaultPlatformService=Steam`, `SteamDevAppId=480` ;
+    - pilote `SteamSocketsNetDriver` déclaré dans la section `GameEngine`, donc seulement hors éditeur, avec repli sur `IpNetDriver` si Steam ne démarre pas ;
+    - abandon d'une connexion sans réponse au bout de 30 s (120 s par défaut).
+  - Nouvelle classe `UArenaSessionSubsystem` (sous-système de la Game Instance : il vit aussi longtemps qu'elle, d'une carte à l'autre). Elle gère héberger (session de 2 joueurs, rejoignable en cours de partie), chercher, rejoindre, quitter, et les invitations Steam acceptées. Le même code sert dans deux cas :
+    - avec Steam (jeu hors éditeur, Steam lancé) : lobby public, retrouvé grâce au réglage `ANERA` publié avec la partie, car l'App ID 480 est partagé par tous les projets en test ;
+    - sans Steam (éditeur, PIE, Steam fermé ou option `-nosteam`) : le moteur prend le sous-système `NULL`, les parties sont annoncées sur le réseau local, et la connexion par IP de 2.4 reste possible.
+  - Hôte :
+    - la partie est annoncée avant l'ouverture de l'arène en listen. Si Steam ne peut pas la créer, l'hôte reste au menu avec un message ;
+    - la phase de jeu (attente, en cours, terminée) est publiée avec la session, depuis `AArenaGameState::SetMatchPhase`. Une partie terminée ou complète n'est plus proposée.
+  - Client : quitter la partie, être déconnecté ou échouer à se connecter ferme sa session. Sa place se libère, et il peut revenir.
+  - Menu (`WBP_MenuPrincipal`) :
+    - liste « Parties Steam ouvertes » (ou « Parties sur le réseau local ») : un bouton par partie, avec le nom de l'hôte, son état (« attend un adversaire » ou « en cours, une place libre ») et le ping ;
+    - bouton Actualiser, et recherche automatique toutes les 10 s. Les boutons ne sont recréés que si les parties changent : un ping qui varie ne met à jour que le texte (sinon un clic peut se perdre) ;
+    - champ IP masqué avec Steam, car un hôte Steam n'écoute que par le relais ;
+    - aide en bas du menu, adaptée au mode.
+  - Écran d'attente de l'hôte : « Partie ouverte sur Steam… aucun port à ouvrir », ou les adresses IP comme avant.
+  - Commandes de test, pour le jeu hors éditeur (MCP ne peut pas y cliquer), à passer au lancement avec `-ExecCmds` : `Arene.Heberger` et `Arene.RejoindrePartie [n]`. La seconde attend que la partie apparaisse dans la liste.
+  - Vérifié :
+    - en PIE Standalone à 2 fenêtres depuis le menu (mode réseau local) :
+      - la partie hébergée apparaît chez l'autre joueur (nom du PC, adresse, ping) ;
+      - l'entrée par la liste donne le camp A ;
+      - après un départ, la partie réapparaît « en cours, une place libre » et le joueur reprend le camp A avec son élixir ;
+      - après la fin de partie (match nul en prolongations), la partie n'est plus proposée ; quand l'hôte quitte, elle disparaît.
+    - hors éditeur (`-game`) avec Steam :
+      - Steam est initialisé (App ID 480) et le relais est prêt ;
+      - le lobby est créé et l'arène écoute par `SteamSocketsNetDriver` ;
+      - un second processus trouve exactement ce lobby, donc le filtre fonctionne parmi les lobbies de l'App ID 480 ;
+      - une connexion Steam impossible ramène au menu avec un message en français.
+  - Pas vérifiable sur un seul PC : l'entrée dans une partie par Steam. Les deux processus utilisaient le même compte : le moteur ignore les données d'un lobby dont on est le propriétaire (la recherche expire au bout de 15 s), et Steam refuse une connexion P2P vers soi-même. Il faut deux comptes Steam sur deux PC (2.6).
+  - Pour jouer avec Steam :
+    - Steam lancé et connecté chez les deux joueurs, jeu lancé normalement (pas depuis la bibliothèque Steam). Steam affiche « Spacewar » comme jeu en cours ;
+    - l'hôte clique sur « Héberger une partie », l'autre joueur choisit la partie dans la liste ;
+    - autre voie : invitation Steam, ou « Rejoindre la partie » dans la liste d'amis, à condition que le jeu soit déjà lancé. Sinon, Steam lancerait Spacewar.
+  - Problèmes ouverts (à vérifier en 2.6) :
+    - la recherche Steam du moteur se limite aux régions proches (filtre de distance) : un ami lointain devra passer par l'invitation ;
+    - invitations et « Rejoindre la partie » : codés, mais pas testés ;
+    - les deux joueurs doivent avoir la même version du jeu : le moteur écarte les parties d'une autre version, qui n'apparaissent donc pas ;
+    - Shipping : `steam_appid.txt` est à livrer avec le jeu (note ajoutée en phase 6) ;
+    - à l'arrivée chez le client, un avertissement du moteur sans conséquence : « Player … is not part of session (GameSession) ».
+  - Outillage :
+    - SlateInspector : la liste `Windows` change d'ordre après chaque `select`, il faut la relire avant de choisir une fenêtre. Survoler (`Hover`) puis cliquer ;
+    - hors éditeur, un log par processus avec `-abslog=<chemin>` ;
+    - un processus `-game` arrêté de force laisse `steam_appid.txt` dans `Engine/Binaries/Win64` (supprimé ici) ;
+    - réglages PIE remis comme au début de la session (Standalone, 1 joueur), arène ouverte.

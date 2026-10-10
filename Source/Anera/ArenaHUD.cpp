@@ -62,12 +62,21 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 		Lines.Emplace(Text, Color);
 	};
 
+	// Hôte d'une partie annoncée sur Steam : l'adversaire la trouve par Steam, sans adresse ni port.
+	const UArenaSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UArenaSessionSubsystem>();
+	const bool bSteamHost = GetNetMode() == NM_ListenServer && Sessions && Sessions->IsUsingSteam() && Sessions->IsHostingSession();
+
 	// Phase et chrono.
 	switch (GameState->GetMatchPhase())
 	{
 	case EArenaMatchPhase::Waiting:
 		Line(TEXT("En attente d'un adversaire…"), FLinearColor::White);
-		if (GetNetMode() == NM_ListenServer)
+		if (bSteamHost)
+		{
+			Line(TEXT("Partie ouverte sur Steam : votre adversaire la choisit dans la liste du menu,"), FLinearColor::White);
+			Line(TEXT("ou passe par Steam (invitation, ou « Rejoindre la partie » dans la liste d'amis). Aucun port à ouvrir."), FLinearColor::Gray);
+		}
+		else if (GetNetMode() == NM_ListenServer)
 		{
 			// Ce qu'il faut à l'adversaire pour rejoindre, et à l'hôte pour régler sa box.
 			const int32 Port = UArenaGameInstance::GetListenPort(GetWorld());
