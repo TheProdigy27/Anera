@@ -115,16 +115,60 @@ AActor* AArenaUnitAIController::SelectTarget(const AArenaUnit* Unit, const UAren
 	return Nearest ? Nearest : (bCurrentValid ? Current : nullptr);
 }
 
+namespace
+{
+	// Tolérance d'arrivée sur un point d'approche : elle est déduite de la portée pour qu'une unité arrivée
+	// au point soit forcément à portée.
+	constexpr float ApproachAcceptance = 20.f;
+
+	// Point marchable d'où l'unité aura le bâtiment à portée, le plus proche d'elle à vol d'oiseau.
+	// Un bâtiment est un trou dans la NavMesh, et il le reste en ruine (la NavMesh est statique) : le pied du mur
+	// le plus proche peut tomber dans le trou d'un bâtiment voisin, d'où ce tour complet des murs.
+	bool FindApproachPoint(const UObject* WorldContext, const AArenaUnit* Unit, const AArenaBuilding* Building, float Range, FVector& OutPoint)
+	{
+		const FVector UnitLocation = Unit->GetActorLocation();
+		double BestDistance = TNumericLimits<double>::Max();
+		for (const FVector& Candidate : Building->GetPointsAroundWalls(Unit->GetRadius() + Range * 0.5f, 50.f))
+		{
+			FVector OnNavMesh;
+			if (!ArenaLevel::ProjectToNavMesh(WorldContext, Candidate, OnNavMesh)
+				|| Building->GetDistanceToWalls(OnNavMesh) - Unit->GetRadius() + ApproachAcceptance > Range)
+			{
+				continue;
+			}
+			const double Distance = FVector::DistSquared2D(UnitLocation, OnNavMesh);
+			if (Distance < BestDistance)
+			{
+				BestDistance = Distance;
+				OutPoint = OnNavMesh;
+			}
+		}
+		return BestDistance < TNumericLimits<double>::Max();
+	}
+}
+
 void AArenaUnitAIController::MoveTowardTarget(const AArenaUnit* Unit, const AActor* Target, float Range)
 {
-	FVector Destination = Target->GetActorLocation();
-	if (const AArenaBuilding* Building = Cast<AArenaBuilding>(Target))
+	const AArenaBuilding* Building = Cast<AArenaBuilding>(Target);
+	if (!Building)
 	{
-		// Un bâtiment est un obstacle : on vise le pied du mur le plus proche, à mi-portée.
-		const FVector Wall = Building->GetClosestWallPoint(Unit->GetActorLocation());
-		const FVector Away = (Unit->GetActorLocation() - Wall).GetSafeNormal2D();
-		Destination = Wall + Away * (Unit->GetRadius() + Range * 0.5f);
+		IssueMove(Unit, Target->GetActorLocation(), FMath::Max(10.f, Range * 0.5f));
+		return;
 	}
+
+	// Un bâtiment est un obstacle : on vise un point au pied de ses murs d'où il est à portée.
+	// L'unité s'arrête d'elle-même dès qu'elle est à portée (UpdateBehavior), souvent avant d'y arriver.
+	FVector Destination;
+	if (!Unit->IsFlying() && FindApproachPoint(this, Unit, Building, Range, Destination))
+	{
+		IssueMove(Unit, Destination, ApproachAcceptance);
+		return;
+	}
+
+	// En vol, ou sans point marchable trouvé : le pied du mur le plus proche, à mi-portée.
+	const FVector Wall = Building->GetClosestWallPoint(Unit->GetActorLocation());
+	const FVector Away = (Unit->GetActorLocation() - Wall).GetSafeNormal2D();
+	Destination = Wall + Away * (Unit->GetRadius() + Range * 0.5f);
 	IssueMove(Unit, Destination, FMath::Max(10.f, Range * 0.5f));
 }
 

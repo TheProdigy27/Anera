@@ -194,6 +194,42 @@ FVector AArenaBuilding::GetClosestWallPoint(const FVector& Point) const
 	return FVector(Center.X, Center.Y, Point.Z) + ToPoint.GetSafeNormal() * FallbackRadius;
 }
 
+TArray<FVector> AArenaBuilding::GetPointsAroundWalls(float Offset, float Spacing) const
+{
+	TArray<FVector> Points;
+	const double Z = GetActorLocation().Z;
+	Spacing = FMath::Max(Spacing, 10.f);
+
+	if (!Footprint.bIsValid)
+	{
+		// Bâtiment sans mesure : un cercle autour du slot.
+		const double Radius = FallbackRadius + Offset;
+		const int32 Count = FMath::Max(8, FMath::CeilToInt(2.0 * UE_DOUBLE_PI * Radius / Spacing));
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			const double Angle = 2.0 * UE_DOUBLE_PI * Index / Count;
+			Points.Emplace(GetActorLocation().X + Radius * FMath::Cos(Angle), GetActorLocation().Y + Radius * FMath::Sin(Angle), Z);
+		}
+		return Points;
+	}
+
+	// Tour du rectangle de l'emprise élargi d'Offset, côté par côté.
+	const FBox2D Box = Footprint.ExpandBy(Offset);
+	const FVector2D Corners[] = { Box.Min, FVector2D(Box.Max.X, Box.Min.Y), Box.Max, FVector2D(Box.Min.X, Box.Max.Y) };
+	for (int32 Side = 0; Side < 4; ++Side)
+	{
+		const FVector2D Start = Corners[Side];
+		const FVector2D End = Corners[(Side + 1) % 4];
+		const int32 Steps = FMath::Max(1, FMath::CeilToInt(FVector2D::Distance(Start, End) / Spacing));
+		for (int32 Step = 0; Step < Steps; ++Step)
+		{
+			const FVector2D Point = FMath::Lerp(Start, End, static_cast<double>(Step) / Steps);
+			Points.Emplace(Point.X, Point.Y, Z);
+		}
+	}
+	return Points;
+}
+
 void AArenaBuilding::HandleHealthChanged(UArenaHealthComponent* ChangedHealth, float Damage, AActor* DamageCauser)
 {
 	const float Fraction = HealthComponent->GetHealthFraction();

@@ -64,6 +64,9 @@ public:
 	// Point des murs le plus proche de Point (pour qu'une unité vienne s'y placer).
 	FVector GetClosestWallPoint(const FVector& Point) const;
 
+	// Points répartis tout autour du bâtiment, à Offset de ses murs et espacés d'environ Spacing, au niveau du sol.
+	TArray<FVector> GetPointsAroundWalls(float Offset, float Spacing) const;
+
 	// Point visé par les projectiles.
 	FVector GetAimPoint() const { return AimPoint; }
 
