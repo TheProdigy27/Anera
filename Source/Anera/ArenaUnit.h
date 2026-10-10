@@ -41,6 +41,10 @@ public:
 	// Rayon de la capsule : sert aux distances de bord à bord.
 	float GetRadius() const;
 
+	// Centre de l'unité telle qu'elle est affichée. Sur le serveur, c'est le centre de la capsule ; chez un
+	// client, le visuel suit la capsule avec le lissage réseau, donc parfois quelques centimètres derrière.
+	FVector GetVisualLocation() const;
+
 	// Serveur : vrai une fois le délai d'apparition écoulé.
 	bool IsDeployed() const;
 

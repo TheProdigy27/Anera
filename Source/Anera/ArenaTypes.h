@@ -1,9 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/NetSerialization.h"
 #include "ArenaTypes.generated.h"
 
 class AArenaProjectile;
+class UArenaCardData;
 
 // Camp d'un joueur : J = joueur 1 (hôte), A = adversaire (joueur 2).
 UENUM(BlueprintType)
@@ -87,4 +89,45 @@ struct FArenaAttackStats
 	// Projectile tiré à chaque coup (vide = attaque au contact, dégâts immédiats).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attaque")
 	TSubclassOf<AArenaProjectile> ProjectileClass;
+};
+
+// Nature d'un effet visuel joué chez tous les joueurs.
+UENUM(BlueprintType)
+enum class EArenaEffectType : uint8
+{
+	Hit UMETA(DisplayName = "Coup au contact"),
+	ProjectileImpact UMETA(DisplayName = "Impact de projectile"),
+	Spell UMETA(DisplayName = "Sort"),
+};
+
+// Effet visuel décidé par le serveur (impact, zone de sort) et joué sur chaque machine. Il ne change rien
+// à la partie : les dégâts sont déjà appliqués par le serveur et répliqués à part (PV des unités et bâtiments).
+USTRUCT(BlueprintType)
+struct FArenaEffect
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Effet")
+	EArenaEffectType Type = EArenaEffectType::Hit;
+
+	// FVector_NetQuantize : position arrondie à l'unité (1 cm), plus compacte à envoyer sur le réseau.
+	UPROPERTY(BlueprintReadOnly, Category = "Effet")
+	FVector_NetQuantize Location = FVector::ZeroVector;
+
+	// Rayon de la zone touchée (0 = une seule cible).
+	UPROPERTY(BlueprintReadOnly, Category = "Effet", meta = (Units = "cm"))
+	float Radius = 0.f;
+
+	// Durée de l'effet au sol (0 = instantané).
+	UPROPERTY(BlueprintReadOnly, Category = "Effet", meta = (Units = "s"))
+	float Duration = 0.f;
+
+	// Camp à l'origine de l'effet.
+	UPROPERTY(BlueprintReadOnly, Category = "Effet")
+	EArenaTeam Team = EArenaTeam::None;
+
+	// Carte à l'origine de l'effet : le sort, ou l'unité qui frappe (vide pour un bâtiment).
+	// Servira en phase 4 à choisir l'effet Niagara et le son.
+	UPROPERTY(BlueprintReadOnly, Category = "Effet")
+	TObjectPtr<UArenaCardData> Card;
 };

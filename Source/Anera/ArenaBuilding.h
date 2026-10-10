@@ -67,8 +67,11 @@ public:
 	// Points répartis tout autour du bâtiment, à Offset de ses murs et espacés d'environ Spacing, au niveau du sol.
 	TArray<FVector> GetPointsAroundWalls(float Offset, float Spacing) const;
 
-	// Point visé par les projectiles.
+	// Point du bas du bâtiment, au centre (repère pour l'affichage des PV).
 	FVector GetAimPoint() const { return AimPoint; }
+
+	// Point de la surface du bâtiment intact le plus proche de From : là où un coup venu de From le touche.
+	FVector GetSurfacePoint(const FVector& From) const;
 
 	// Serveur et clients : le bâtiment vient d'être détruit (couronnes, effets de la phase 4).
 	UPROPERTY(BlueprintAssignable, Category = "Arene|Batiment")
@@ -148,7 +151,9 @@ private:
 	TArray<TWeakObjectPtr<AActor>> StateActors[3];
 	bool bGathered = false;
 
-	// Mesures du bâtiment intact : emprise au sol et point visé. À défaut, un cercle autour du slot.
+	// Mesures du bâtiment intact : boîte englobante, emprise au sol (élargie du socle) et point visé.
+	// À défaut, un cercle autour du slot.
+	FBox MeshBounds = FBox(ForceInit);
 	FBox2D Footprint = FBox2D(ForceInit);
 	FVector AimPoint = FVector::ZeroVector;
 	float FallbackRadius = 120.f;

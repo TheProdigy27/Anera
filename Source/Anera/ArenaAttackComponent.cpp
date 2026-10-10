@@ -64,27 +64,32 @@ void UArenaAttackComponent::PerformAttack(AActor* AttackTarget)
 {
 	AActor* Owner = GetOwner();
 	const EArenaTeam Team = ArenaCombat::GetTeam(Owner);
+	UArenaCardData* Card = ArenaCombat::GetCard(Owner);
 
 	if (Stats.ProjectileClass)
 	{
 		const FVector Origin = GetProjectileOrigin();
-		const FTransform SpawnTransform((ArenaCombat::GetAimPoint(AttackTarget) - Origin).Rotation(), Origin);
+		const FTransform SpawnTransform((ArenaCombat::GetImpactPoint(AttackTarget, Origin) - Origin).Rotation(), Origin);
 		AArenaProjectile* Projectile = GetWorld()->SpawnActorDeferred<AArenaProjectile>(Stats.ProjectileClass, SpawnTransform,
 			Owner, Cast<APawn>(Owner), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 		if (Projectile)
 		{
-			Projectile->InitializeProjectile(AttackTarget, Stats.Damage, Stats.SplashRadius, Stats.TargetType, Team);
+			Projectile->InitializeProjectile(AttackTarget, Stats.Damage, Stats.SplashRadius, Stats.TargetType, Team, Card);
 			Projectile->FinishSpawning(SpawnTransform);
 		}
 	}
 	else if (Stats.SplashRadius > 0.f)
 	{
-		ArenaCombat::ApplyAreaDamage(GetWorld(), AttackTarget->GetActorLocation(), Stats.SplashRadius, Stats.Damage, Team,
-			Stats.TargetType, 1.f, Owner);
+		const FVector Center = AttackTarget->GetActorLocation();
+		ArenaCombat::ApplyAreaDamage(GetWorld(), Center, Stats.SplashRadius, Stats.Damage, Team, Stats.TargetType, 1.f, Owner);
+		ArenaCombat::PlayEffect(GetWorld(), EArenaEffectType::Hit, Center, Stats.SplashRadius, 0.f, Team, Card);
 	}
 	else
 	{
+		// Point d'impact mesuré avant les dégâts, qui peuvent détruire la cible.
+		const FVector ImpactPoint = ArenaCombat::GetImpactPoint(AttackTarget, Owner->GetActorLocation());
 		ArenaCombat::DealDamage(AttackTarget, Stats.Damage, Owner);
+		ArenaCombat::PlayEffect(GetWorld(), EArenaEffectType::Hit, ImpactPoint, 0.f, 0.f, Team, Card);
 	}
 
 	OnAttack.Broadcast(AttackTarget);

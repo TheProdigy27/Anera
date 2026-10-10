@@ -4,6 +4,7 @@
 #include "ArenaTypes.h"
 
 class AActor;
+class UArenaCardData;
 class UArenaHealthComponent;
 class UWorld;
 
@@ -27,8 +28,16 @@ namespace ArenaCombat
 	// Distance entre les bords des deux acteurs (rayon des unités, murs des bâtiments), à plat.
 	float GetEdgeDistance(const AActor* From, const AActor* To);
 
-	// Point visé par les projectiles.
-	FVector GetAimPoint(const AActor* Target);
+	// Point où un coup venu de From touche la cible : sur ses murs pour un bâtiment, sur le bord de sa capsule
+	// pour une unité. Les projectiles y terminent leur course, les effets d'impact s'y affichent.
+	FVector GetImpactPoint(const AActor* Target, const FVector& From);
+
+	// Carte d'une unité (vide pour un bâtiment).
+	UArenaCardData* GetCard(const AActor* Actor);
+
+	// Serveur : fait jouer un effet visuel chez tous les joueurs (voir AArenaGameState::PlayEffect).
+	void PlayEffect(UWorld* World, EArenaEffectType Type, const FVector& Location, float Radius, float Duration, EArenaTeam Team,
+		UArenaCardData* Card);
 
 	// Ennemi vivant le plus proche de Seeker à moins de MaxDistance (de bord à bord), selon le type de cible.
 	AActor* FindNearestEnemy(const AActor* Seeker, EArenaTargetType TargetType, float MaxDistance, bool bIncludeBuildings = true);

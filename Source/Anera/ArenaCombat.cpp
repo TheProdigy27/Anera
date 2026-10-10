@@ -1,5 +1,6 @@
 #include "ArenaCombat.h"
 #include "ArenaBuilding.h"
+#include "ArenaGameState.h"
 #include "ArenaHealthComponent.h"
 #include "ArenaUnit.h"
 #include "EngineUtils.h"
@@ -92,13 +93,42 @@ namespace ArenaCombat
 		return FMath::Max(0.f, Distance - FromRadius);
 	}
 
-	FVector GetAimPoint(const AActor* Target)
+	FVector GetImpactPoint(const AActor* Target, const FVector& From)
 	{
 		if (const AArenaBuilding* Building = Cast<AArenaBuilding>(Target))
 		{
-			return Building->GetAimPoint();
+			return Building->GetSurfacePoint(From);
 		}
-		return Target ? Target->GetActorLocation() : FVector::ZeroVector;
+		const AArenaUnit* Unit = Cast<AArenaUnit>(Target);
+		if (!Unit)
+		{
+			return Target ? Target->GetActorLocation() : From;
+		}
+		const FVector Center = Unit->GetVisualLocation();
+		return Center + FVector(From.X - Center.X, From.Y - Center.Y, 0.0).GetSafeNormal() * Unit->GetRadius();
+	}
+
+	UArenaCardData* GetCard(const AActor* Actor)
+	{
+		const AArenaUnit* Unit = Cast<AArenaUnit>(Actor);
+		return Unit ? Unit->GetCard() : nullptr;
+	}
+
+	void PlayEffect(UWorld* World, EArenaEffectType Type, const FVector& Location, float Radius, float Duration, EArenaTeam Team, UArenaCardData* Card)
+	{
+		AArenaGameState* GameState = World ? World->GetGameState<AArenaGameState>() : nullptr;
+		if (!GameState)
+		{
+			return;
+		}
+		FArenaEffect Effect;
+		Effect.Type = Type;
+		Effect.Location = Location;
+		Effect.Radius = Radius;
+		Effect.Duration = Duration;
+		Effect.Team = Team;
+		Effect.Card = Card;
+		GameState->PlayEffect(Effect);
 	}
 
 	AActor* FindNearestEnemy(const AActor* Seeker, EArenaTargetType TargetType, float MaxDistance, bool bIncludeBuildings)

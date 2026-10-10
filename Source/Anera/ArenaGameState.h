@@ -43,9 +43,23 @@ public:
 	void SetWinner(EArenaTeam NewWinner);
 	void SetDoubleElixir(bool bEnabled);
 
+	// Serveur : fait jouer un effet visuel (impact, zone de sort) chez tous les joueurs, hôte compris.
+	// Les effets d'une même image partent ensemble, dans un seul RPC envoyé à l'image suivante.
+	void PlayEffect(const FArenaEffect& Effect);
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
+	// Joue un effet sur cette machine. Par défaut, un marqueur provisoire (AArenaEffectMarker) ;
+	// en phase 4, BP_ArenaGameState pourra le remplacer par des effets Niagara et des sons.
+	// BlueprintNativeEvent : fonction C++ qu'un Blueprint enfant peut redéfinir.
+	UFUNCTION(BlueprintNativeEvent, Category = "Arene|Effets")
+	void SpawnEffect(const FArenaEffect& Effect);
+
+	// Marqueur provisoire créé par SpawnEffect (vide = AArenaEffectMarker).
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Effets")
+	TSubclassOf<class AArenaEffectMarker> EffectMarkerClass;
+
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Arene|Partie")
 	EArenaMatchPhase MatchPhase = EArenaMatchPhase::Waiting;
 
@@ -65,4 +79,16 @@ protected:
 
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Arene|Partie")
 	bool bDoubleElixir = false;
+
+private:
+	// RPC multicast : appelé sur le serveur, exécuté sur le serveur et chez chaque client.
+	// Unreliable (non fiable) : un paquet perdu n'est pas renvoyé. Cela convient à un effet visuel,
+	// qu'il ne servirait à rien d'afficher en retard.
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayEffects(const TArray<FArenaEffect>& Effects);
+
+	void SendPendingEffects();
+
+	TArray<FArenaEffect> PendingEffects;
+	bool bEffectSendScheduled = false;
 };

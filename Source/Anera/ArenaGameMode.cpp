@@ -494,5 +494,6 @@ void AArenaGameMode::ResolveSpell(UArenaCardData* Card, EArenaTeam Team, FVector
 	ArenaCombat::ApplyAreaDamage(GetWorld(), Location, Card->SpellRadius, Card->SpellDamage, Team,
 		EArenaTargetType::GroundAndAir, Card->BuildingDamageScale, nullptr);
 	ArenaCombat::ApplyAreaSlow(GetWorld(), Location, Card->SpellRadius, Team, Card->SlowAmount, Card->EffectDuration);
+	ArenaCombat::PlayEffect(GetWorld(), EArenaEffectType::Spell, Location, Card->SpellRadius, Card->EffectDuration, Team, Card);
 	UE_LOG(LogArene, Log, TEXT("Sort %s en %s"), *Card->DisplayName.ToString(), *Location.ToCompactString());
 }

@@ -124,7 +124,6 @@ void AArenaBuilding::GatherLevelActors()
 		UE_LOG(LogArene, Warning, TEXT("Aucun acteur avec le tag 'batiment:%s' : le batiment restera invisible."), *Group.ToString());
 	}
 
-	FBox IntactBounds(ForceInit);
 	for (AActor* Actor : Found)
 	{
 		const FString State = ArenaLevel::GetTagValue(Actor, TEXT("etat"));
@@ -136,18 +135,18 @@ void AArenaBuilding::GatherLevelActors()
 		StateActors[Index].Add(Actor);
 		if (Index == 0 && Actor->IsA<AStaticMeshActor>())
 		{
-			IntactBounds += Actor->GetComponentsBoundingBox(true);
+			MeshBounds += Actor->GetComponentsBoundingBox(true);
 		}
 	}
 
-	if (IntactBounds.IsValid)
+	if (MeshBounds.IsValid)
 	{
-		// Emprise au sol du bâtiment intact (pour les distances), et point visé dans le bas du bâtiment.
+		// Emprise au sol du bâtiment intact (pour les distances), et point de repère dans le bas du bâtiment.
 		// Le socle autour du bâtiment n'est pas marchable et ne fait pas partie de son mesh : l'emprise est
 		// élargie d'autant, sans quoi une unité de mêlée resterait hors de portée au bord du socle.
-		const FVector Center = IntactBounds.GetCenter();
-		Footprint = FBox2D(FVector2D(IntactBounds.Min), FVector2D(IntactBounds.Max)).ExpandBy(SocleWidth);
-		AimPoint = FVector(Center.X, Center.Y, IntactBounds.Min.Z + 0.4f * IntactBounds.GetSize().Z);
+		const FVector Center = MeshBounds.GetCenter();
+		Footprint = FBox2D(FVector2D(MeshBounds.Min), FVector2D(MeshBounds.Max)).ExpandBy(SocleWidth);
+		AimPoint = FVector(Center.X, Center.Y, MeshBounds.Min.Z + 0.4f * MeshBounds.GetSize().Z);
 	}
 	else
 	{
@@ -192,6 +191,13 @@ FVector AArenaBuilding::GetClosestWallPoint(const FVector& Point) const
 		return Point;
 	}
 	return FVector(Center.X, Center.Y, Point.Z) + ToPoint.GetSafeNormal() * FallbackRadius;
+}
+
+FVector AArenaBuilding::GetSurfacePoint(const FVector& From) const
+{
+	// Boîte du mesh intact, sans le socle : le point touché est sur les murs, à la hauteur du tireur
+	// (ramenée entre le pied et le sommet du bâtiment).
+	return MeshBounds.IsValid ? MeshBounds.GetClosestPointTo(From) : GetClosestWallPoint(From);
 }
 
 TArray<FVector> AArenaBuilding::GetPointsAroundWalls(float Offset, float Spacing) const

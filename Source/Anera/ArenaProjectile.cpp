@@ -32,7 +32,8 @@ AArenaProjectile::AArenaProjectile()
 	VisualMesh->SetCastShadow(false);
 }
 
-void AArenaProjectile::InitializeProjectile(AActor* InTarget, float InDamage, float InSplashRadius, EArenaTargetType InTargetType, EArenaTeam InTeam)
+void AArenaProjectile::InitializeProjectile(AActor* InTarget, float InDamage, float InSplashRadius, EArenaTargetType InTargetType, EArenaTeam InTeam,
+	UArenaCardData* InCard)
 {
 	check(HasAuthority());
 	Target = InTarget;
@@ -40,13 +41,14 @@ void AArenaProjectile::InitializeProjectile(AActor* InTarget, float InDamage, fl
 	SplashRadius = InSplashRadius;
 	TargetType = InTargetType;
 	Team = InTeam;
+	Card = InCard;
 }
 
 void AArenaProjectile::BeginPlay()
 {
 	Super::BeginPlay();
 	// Sans cible connue (cas d'un client qui la reçoit en retard), le projectile part tout droit.
-	Destination = IsValid(Target) ? ArenaCombat::GetAimPoint(Target) : GetActorLocation() + GetActorForwardVector() * 1000.f;
+	Destination = IsValid(Target) ? ArenaCombat::GetImpactPoint(Target, GetActorLocation()) : GetActorLocation() + GetActorForwardVector() * 1000.f;
 }
 
 void AArenaProjectile::Tick(float DeltaSeconds)
@@ -59,7 +61,7 @@ void AArenaProjectile::Tick(float DeltaSeconds)
 
 	if (IsValid(Target))
 	{
-		Destination = ArenaCombat::GetAimPoint(Target);
+		Destination = ArenaCombat::GetImpactPoint(Target, GetActorLocation());
 	}
 
 	const FVector ToDestination = Destination - GetActorLocation();
@@ -86,6 +88,7 @@ void AArenaProjectile::Tick(float DeltaSeconds)
 
 void AArenaProjectile::Impact()
 {
+	ArenaCombat::PlayEffect(GetWorld(), EArenaEffectType::ProjectileImpact, Destination, SplashRadius, 0.f, Team, Card);
 	if (SplashRadius > 0.f)
 	{
 		ArenaCombat::ApplyAreaDamage(GetWorld(), Destination, SplashRadius, Damage, Team, TargetType, 1.f, GetOwner());

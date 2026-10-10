@@ -101,7 +101,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 
 - [x] **2.1** Tester le code de la phase 1 avec 2 joueurs en PIE : Net Mode « Play As Listen Server », 2 joueurs. Corriger tout ce qui n'est pas répliqué.
 - [x] **2.2** Le premier connecté joue le camp J (hôte), le second le camp A. Caméra retournée pour A, chaque joueur ne peut déployer que dans sa zone.
-- [ ] **2.3** Interpolation des déplacements des unités côté client (CharacterMovement répliqué), réplication des projectiles et des effets d'impact.
+- [x] **2.3** Interpolation des déplacements des unités côté client (CharacterMovement répliqué), réplication des projectiles et des effets d'impact.
 - [ ] **2.4** Connexion par IP pour commencer : menu « Héberger » (`open <Map>?listen`) et « Rejoindre » (`open <IP>`). Port 7777 à ouvrir sur la box de l'hôte.
 - [ ] **2.5** Ensuite, connexion sans ouvrir de ports : Epic Online Services (sessions et relais P2P, gratuit), ou Steam si tout le monde l'utilise. Vérifier la documentation de la version d'UE installée avant de choisir.
 - [ ] **2.6** Test avec latence simulée (`Net PktLag=100`, `Net PktLoss=2`) et entre 2 PC réels.
@@ -254,3 +254,28 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
   - Faute de menu, le joueur refusé revient à la carte par défaut (l'arène, en solo contre l'IA). En phase 3, il reviendra au menu avec le message.
   - Le module est recompilé avec `Build.bat` (éditeur fermé, puis relancé) : la DLL contient aussi les changements faits par Live Coding en 2.1.
   - Problème ouvert : un joueur qui revient en cours de partie (après une déconnexion) prendrait le camp libre, mais sans élixir ni deck, distribués au seul lancement de la partie. À traiter avec la connexion par IP (2.4).
+- 2026-10-10 — 2.3 faite : déplacements lissés chez le client, projectiles arrêtés sur la surface de leur cible, effets d'impact répliqués.
+  - Déplacements :
+    - Chez un client, le cylindre des unités sautait à chaque position reçue du serveur. En effet, CharacterMovement ne lisse que le composant `Mesh` du Character, et le cylindre était attaché à la capsule.
+    - Le cylindre est maintenant attaché au `Mesh`, qui recevra le modèle animé en phase 4. Le texte de débogage au-dessus des unités suit lui aussi le visuel lissé (`AArenaUnit::GetVisualLocation`).
+    - Les positions des unités partent 30 fois par seconde au lieu de 100, ce qui divise le débit par trois.
+  - Projectiles : ils étaient déjà répliqués (cible répliquée, trajectoire calculée sur chaque machine). Ils s'arrêtent maintenant sur la surface de la cible (murs du bâtiment intact, bord de la capsule) au lieu de son centre (`ArenaCombat::GetImpactPoint`).
+  - Effets d'impact :
+    - `AArenaGameState::PlayEffect` (serveur) fait jouer un effet chez tous les joueurs : coup au contact, impact de projectile ou sort (`FArenaEffect` : type, position, rayon, durée, camp, carte).
+    - Les effets d'une image partent ensemble dans un seul RPC multicast non fiable, suivi d'un `ForceNetUpdate`. Deux raisons à cela : le moteur ne laisse passer que 2 appels d'un même multicast non fiable par mise à jour réseau d'un acteur (`net.MaxRPCPerNetUpdate`), et le GameState n'a que 10 mises à jour par seconde.
+    - Chaque machine joue l'effet dans `SpawnEffect` (BlueprintNativeEvent, à redéfinir dans `BP_ArenaGameState` en phase 4). En attendant, `AArenaEffectMarker` affiche une sphère (coup sur une cible) ou un disque au sol (zone), à la couleur du camp, pendant 0,25 s ou pendant la durée du sort.
+  - Outil de test : la commande `Arene.MesureMouvement [secondes]` compte les à-coups des unités (capsule et visuel) sur le serveur et sur chaque client du PIE. Elle resservira en 2.6.
+  - Vérifié en PIE (Listen Server, 2 joueurs, mode démo, environ 115 images/s) :
+
+    | Condition | Serveur (référence) | Client, capsule (affichage d'avant) | Client, visuel lissé |
+    |---|---|---|---|
+    | Sans latence | 0,19 % d'images avec à-coup | 4,28 % | 0,61 % |
+    | `Net PktLag=100` | 0,68 % | 11,46 % | 1,08 % (écart visuel–capsule : moyen 0,4 uu, max 17 uu) |
+
+    - Les 20 effets joués sur le serveur en 8 s (1 coup, 18 impacts, 1 Boule de feu) sont tous arrivés chez le client, à une image près.
+    - Le serveur et le client ont créé autant de marqueurs (98) et de projectiles (118) l'un que l'autre. Aucun avertissement du jeu dans le log.
+  - Outillage :
+    - En arrière-plan, l'éditeur se bride à environ 4 images/s. Pour une mesure, mettre `bThrottleCPUWhenNotForeground` à faux sur `/Script/UnrealEd.Default__EditorPerformanceSettings` (remis à vrai ensuite).
+    - Console de l'éditeur via SlateInspector : `Snapshot` de la fenêtre principale, puis `Type` dans la zone de texte à droite du bouton « Cmd ».
+    - Réglages PIE remis en Standalone, 1 joueur, et `bDemoMode` remis à faux.
+  - Problème ouvert : un effet dont le paquet est perdu n'est pas renvoyé (RPC non fiable). C'est acceptable pour un visuel, mais à revoir si le disque du Mur de ronces manque trop souvent en 2.6 (`Net PktLoss`).

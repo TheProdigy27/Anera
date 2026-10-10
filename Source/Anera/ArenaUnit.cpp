@@ -23,8 +23,11 @@ AArenaUnit::AArenaUnit()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 
+	// Le visuel est attaché au Mesh du Character, pas à la capsule. Chez un client, la capsule est recalée d'un
+	// coup à chaque position reçue du serveur, et CharacterMovement ne lisse que le Mesh (il le décale puis le
+	// ramène en douceur sur la capsule). Le Mesh est vide pour l'instant : il recevra le modèle animé en phase 4.
 	BodyMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Corps"));
-	BodyMesh->SetupAttachment(GetCapsuleComponent());
+	BodyMesh->SetupAttachment(GetMesh());
 	BodyMesh->SetStaticMesh(CylinderMesh.Object);
 	BodyMesh->SetMaterial(0, ShapeMaterial.Object);
 	// Le cylindre du moteur fait 100 × 100 × 100 : on l'ajuste à la capsule (70 de large, 120 de haut).
@@ -47,6 +50,11 @@ AArenaUnit::AArenaUnit()
 	Movement->bUseRVOAvoidance = true;
 	Movement->AvoidanceConsiderationRadius = 120.f;
 	Movement->BrakingDecelerationFlying = 2000.f;
+
+	// Positions envoyées aux clients 30 fois par seconde (100 par défaut pour un Pawn) : entre deux envois, le
+	// client prolonge le mouvement à la vitesse reçue, et le lissage gomme les écarts. Cela divise par trois
+	// le débit, qui grandit avec le nombre d'unités en jeu.
+	SetNetUpdateFrequency(30.f);
 }
 
 void AArenaUnit::InitializeUnit(UArenaCardData* InCard, EArenaTeam InTeam, float DeployDelay)
@@ -96,6 +104,11 @@ bool AArenaUnit::IsFlying() const
 float AArenaUnit::GetRadius() const
 {
 	return GetCapsuleComponent()->GetScaledCapsuleRadius();
+}
+
+FVector AArenaUnit::GetVisualLocation() const
+{
+	return BodyMesh->GetComponentLocation();
 }
 
 bool AArenaUnit::IsDeployed() const

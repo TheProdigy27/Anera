@@ -5,6 +5,7 @@
 #include "ArenaTypes.h"
 #include "ArenaProjectile.generated.h"
 
+class UArenaCardData;
 class USphereComponent;
 class UStaticMeshComponent;
 
@@ -19,8 +20,9 @@ class ANERA_API AArenaProjectile : public AActor
 public:
 	AArenaProjectile();
 
-	// Serveur uniquement, entre SpawnActorDeferred et FinishSpawning.
-	void InitializeProjectile(AActor* InTarget, float InDamage, float InSplashRadius, EArenaTargetType InTargetType, EArenaTeam InTeam);
+	// Serveur uniquement, entre SpawnActorDeferred et FinishSpawning. InCard : carte du tireur (vide pour un bâtiment).
+	void InitializeProjectile(AActor* InTarget, float InDamage, float InSplashRadius, EArenaTargetType InTargetType, EArenaTeam InTeam,
+		UArenaCardData* InCard);
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -28,7 +30,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	// Serveur : dégâts au point d'arrivée, puis destruction.
+	// Serveur : dégâts et effet d'impact au point d'arrivée, puis destruction.
 	void Impact();
 
 	UPROPERTY(VisibleAnywhere, Category = "Arene|Projectile")
@@ -55,8 +57,12 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, Category = "Arene|Projectile")
 	EArenaTeam Team = EArenaTeam::None;
 
+	UPROPERTY(VisibleInstanceOnly, Category = "Arene|Projectile")
+	TObjectPtr<UArenaCardData> Card;
+
 private:
-	// Dernière position connue de la cible : le projectile y termine sa course si la cible disparaît.
+	// Point d'impact sur la cible, suivi à chaque image. Si la cible disparaît, le projectile termine
+	// sa course au dernier point connu.
 	FVector Destination = FVector::ZeroVector;
 	bool bArrived = false;
 };

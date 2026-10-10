@@ -155,7 +155,7 @@ void AArenaHUD::DrawWorldLabels(float Scale)
 	for (TActorIterator<AArenaUnit> It(GetWorld()); It; ++It)
 	{
 		const AArenaUnit* Unit = *It;
-		const FVector Screen = Project(Unit->GetActorLocation() + FVector(0.f, 0.f, 90.f));
+		const FVector Screen = Project(Unit->GetVisualLocation() + FVector(0.f, 0.f, 90.f));
 		if (Screen.Z <= 0.f)
 		{
 			continue;
