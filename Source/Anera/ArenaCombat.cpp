@@ -65,6 +65,13 @@ namespace ArenaCombat
 		{
 			return TNumericLimits<float>::Max();
 		}
+		// Un bâtiment se mesure toujours par ses murs, qu'il vise ou qu'il soit visé : la distance est la même
+		// dans les deux sens. Sinon une tour, mesurée depuis son centre, serait hors de portée d'une unité
+		// qui, elle, l'atteint.
+		if (Cast<AArenaBuilding>(From) && !Cast<AArenaBuilding>(To))
+		{
+			Swap(From, To);
+		}
 		const FVector FromLocation = From->GetActorLocation();
 		const AArenaUnit* FromUnit = Cast<AArenaUnit>(From);
 		const float FromRadius = FromUnit ? FromUnit->GetRadius() : 0.f;
