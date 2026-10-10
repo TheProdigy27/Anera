@@ -178,12 +178,23 @@ bool AArenaPlayerController::TryPlayCardAt(int32 HandIndex, const FVector& Point
 
 void AArenaPlayerController::HandleCardInput()
 {
-	static const FKey SlotKeys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four };
+	// Touches de chaque emplacement de la main. Unreal reconnaît la rangée du haut au caractère qu'elle produit :
+	// en AZERTY, sans Maj, elle donne & é " ' et non 1 2 3 4. Le pavé numérique marche quelle que soit la disposition.
+	static const FKey SlotKeys[][3] = {
+		{ EKeys::One, EKeys::Ampersand, EKeys::NumPadOne },
+		{ EKeys::Two, EKeys::E_AccentAigu, EKeys::NumPadTwo },
+		{ EKeys::Three, EKeys::Quote, EKeys::NumPadThree },
+		{ EKeys::Four, EKeys::Apostrophe, EKeys::NumPadFour },
+	};
 	for (int32 Index = 0; Index < UE_ARRAY_COUNT(SlotKeys); ++Index)
 	{
-		if (WasInputKeyJustPressed(SlotKeys[Index]))
+		for (const FKey& Key : SlotKeys[Index])
 		{
-			SelectHandSlot(Index);
+			if (WasInputKeyJustPressed(Key))
+			{
+				SelectHandSlot(Index);
+				break;
+			}
 		}
 	}
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton))

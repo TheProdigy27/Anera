@@ -159,7 +159,7 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 		{
 			Line(FString::Printf(TEXT("    Suivante : %s (%d)"), *Next->DisplayName.ToString(), Next->ElixirCost), FLinearColor::Gray);
 		}
-		Line(TEXT("Touches 1-4 : choisir, clic gauche : poser, clic droit : annuler"), FLinearColor::Gray);
+		Line(TEXT("Touches 1-4 (rangée du haut ou pavé numérique) : choisir, clic gauche : poser, clic droit : annuler"), FLinearColor::Gray);
 	}
 	Line(GameState->IsMatchRunning() ? TEXT("Échap (deux fois) : quitter la partie") : TEXT("Échap : retour au menu"), FLinearColor::Gray);
 
