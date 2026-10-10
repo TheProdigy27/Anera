@@ -381,7 +381,13 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - la console de l'éditeur accepte plusieurs commandes séparées par `|`, exécutées dans la même image ;
     - comparaison des effets : avec `LogArene` en `VeryVerbose`, chaque effet joué est écrit dans le log avec sa machine. L'analyse a été faite par un script ponctuel, hors dépôt ;
     - réglages remis comme au début de la session : Standalone, 1 joueur, émulation coupée, bridage en arrière-plan rétabli, `Arene.Demo 0`.
+  - Build de test pour la partie entre deux PC :
+    - build Development par `RunUAT BuildCookRun` (cartes Menu et Arene, pak, prérequis, archive), avec `-nocompileeditor` : sinon il recompile aussi la cible éditeur, ce qui échoue tant que l'éditeur tourne avec Live Coding. Durée : 2 min 47 s la première fois, 32 s ensuite ;
+    - zip de 502 Mo, sans le PDB (377 Mo, gardé à part pour lire un éventuel plantage), rangé dans `Documents\Anera\Builds\`, hors dépôt. Il contient un `LISEZMOI.txt` pour l'adversaire : installation, avertissement SmartScreen, Steam, touches et points à vérifier ;
+    - UE 5.8 ne fournit plus `UEPrereqSetup` : `-prereqs` copie `vc_redist.x64.exe` de Microsoft dans `Windows\Engine\Extras\Redist\en-us\` ;
+    - vérifié avec le jeu packagé : deux instances sans Steam (réseau local), l'invité trouve la partie, la rejoint en camp A, et la partie démarre à 2 ; une instance avec Steam, API initialisée (App ID 480), lobby créé, arène en écoute par `SteamSocketsNetDriver`. Aucune erreur dans les logs. Les fichiers créés par ces essais (`steam_appid.txt`, `Saved`) sont retirés avant le zip ;
+    - bug corrigé grâce à ce build : `Arene.RejoindrePartie`, qui attendait l'apparition de la partie, se retirait du délégué `OnSearchUpdated` puis lisait l'index dans ses propres captures, déjà détruites. En PIE, l'ancienne valeur restait lisible ; le jeu packagé remplit la mémoire libérée, d'où un index absurde et aucune connexion. Seule la commande de test était touchée : le bouton du menu passe par un autre chemin.
   - Reste à faire pour cocher 2.6, une partie entre deux PC :
-    - deux comptes Steam, Steam lancé des deux côtés, la même version du jeu sur les deux PC (il faut un build pour le second PC) ;
+    - deux comptes Steam, Steam lancé des deux côtés, le même zip sur les deux PC (une autre version n'apparaît pas dans la liste) ;
     - à vérifier : chrono, couronnes et PV identiques sur les deux écrans, cartes de l'invité posées sans attente visible, pas d'unité qui saute, zone du Mur de ronces visible des deux côtés, départ puis retour de l'invité, invitation Steam ;
     - en build Development, la console (touche `²` ou `~`) permet `stat net` (ping, pertes) et `Arene.MesureMouvement 20` chez l'invité.

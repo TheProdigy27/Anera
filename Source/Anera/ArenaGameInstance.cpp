@@ -414,9 +414,11 @@ namespace
 			UArenaSessionSubsystem* WaitingSessions = WaitingGameInstance ? WaitingGameInstance->GetSubsystem<UArenaSessionSubsystem>() : nullptr;
 			if (WaitingSessions && !WaitingSessions->IsSearching() && WaitingSessions->GetFoundSessions().IsValidIndex(Index))
 			{
+				// Retirer ce délégué détruit la lambda en cours, et ses captures avec : on copie d'abord l'index.
+				const int32 FoundIndex = Index;
 				WaitingSessions->OnSearchUpdated.Remove(WaitHandle);
-				UE_LOG(LogArene, Log, TEXT("Arene.RejoindrePartie : partie %d trouvee"), Index + 1);
-				WaitingGameInstance->JoinFoundSession(Index);
+				UE_LOG(LogArene, Log, TEXT("Arene.RejoindrePartie : partie %d trouvee"), FoundIndex + 1);
+				WaitingGameInstance->JoinFoundSession(FoundIndex);
 			}
 		});
 	}
