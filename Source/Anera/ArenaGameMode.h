@@ -48,8 +48,8 @@ protected:
 	void TryStartMatch();
 	void StartMatch();
 
-	// Solo (partie sans réseau) : une IA joue le camp A. En mode démo, une autre IA joue aussi le camp J
-	// avec le PlayerState du joueur.
+	// Solo (partie sans réseau) : une IA joue le camp A. En mode démo, une IA joue aussi à la place
+	// de chaque joueur humain, avec son PlayerState (en solo comme en réseau).
 	void SpawnAIOpponents();
 	AArenaAIOpponent* SpawnAIOpponent(EArenaTeam Team, AArenaPlayerState* ExistingState);
 
@@ -109,7 +109,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Classes")
 	TSubclassOf<AArenaAIOpponent> AIOpponentClass;
 
-	// Test : en solo, une IA joue aussi le camp J à la place du joueur (partie IA contre IA à regarder).
+	// Test : une IA joue à la place de chaque joueur humain (partie IA contre IA à regarder, en solo ou en réseau).
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Partie")
 	bool bDemoMode = false;
 

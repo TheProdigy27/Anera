@@ -7,9 +7,11 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
@@ -87,18 +89,28 @@ void AArenaPlayerController::ConfirmCardPlacement()
 {
 	UArenaCardData* Card = nullptr;
 	FVector CursorLocation;
-	const AArenaPlayerState* State = GetArenaPlayerState();
-	if (!State || !GetCardUnderCursor(Card, CursorLocation))
+	if (GetCardUnderCursor(Card, CursorLocation) && TryPlayCardAt(SelectedHandSlot, CursorLocation))
 	{
-		return;
+		CancelCardSelection();
+	}
+}
+
+bool AArenaPlayerController::TryPlayCardAt(int32 HandIndex, const FVector& Point)
+{
+	const AArenaPlayerState* State = GetArenaPlayerState();
+	const TArray<UArenaCardData*> Hand = State ? State->GetHand() : TArray<UArenaCardData*>();
+	UArenaCardData* Card = Hand.IsValidIndex(HandIndex) ? Hand[HandIndex] : nullptr;
+	if (!Card)
+	{
+		return false;
 	}
 	FVector GroundLocation;
-	if (State->GetElixir() < Card->ElixirCost || !ArenaLevel::IsValidPlacement(this, State->GetTeam(), Card, CursorLocation, GroundLocation))
+	if (State->GetElixir() < Card->ElixirCost || !ArenaLevel::IsValidPlacement(this, State->GetTeam(), Card, Point, GroundLocation))
 	{
-		return;
+		return false;
 	}
-	ServerPlayCard(Card, CursorLocation);
-	CancelCardSelection();
+	ServerPlayCard(Card, Point);
+	return true;
 }
 
 void AArenaPlayerController::HandleCardInput()
@@ -400,4 +412,72 @@ FVector AArenaPlayerController::ComputeFittedLocation(const FRotator& Rotation, 
 	const double CameraHeight = 0.5 * ((MaxTop + SlopeTop * CameraDepth) - (MaxBottom + SlopeBottom * CameraDepth));
 
 	return Forward * CameraDepth + Right * CameraSide + Up * CameraHeight;
+}
+
+namespace
+{
+	// Joueur local qui jouera la carte. Sans camp précisé : celui du monde de la console.
+	// Avec un camp : le joueur local de ce camp, cherché dans tous les mondes du processus. En PIE, l'hôte et
+	// chaque client ont leur propre monde, et la console de l'éditeur vise toujours l'hôte : c'est ce qui permet
+	// de jouer pour un client.
+	AArenaPlayerController* FindLocalController(UWorld* ConsoleWorld, EArenaTeam Team)
+	{
+		if (!GEngine)
+		{
+			return nullptr;
+		}
+		if (Team == EArenaTeam::None)
+		{
+			return ConsoleWorld ? Cast<AArenaPlayerController>(GEngine->GetFirstLocalPlayerController(ConsoleWorld)) : nullptr;
+		}
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			UWorld* World = Context.World();
+			AArenaPlayerController* Controller = World && World->IsGameWorld()
+				? Cast<AArenaPlayerController>(GEngine->GetFirstLocalPlayerController(World)) : nullptr;
+			const AArenaPlayerState* State = Controller ? Controller->GetPlayerState<AArenaPlayerState>() : nullptr;
+			if (State && State->GetTeam() == Team)
+			{
+				return Controller;
+			}
+		}
+		return nullptr;
+	}
+
+	// Commande de test, pour poser une carte sans souris (réseau, automatisation) :
+	// « Arene.PoseCarte <emplacement 1-4> <X> <Y> [J|A] » fait comme un clic au point (X, Y) du terrain,
+	// avec les mêmes vérifications chez le joueur, puis ServerPlayCard.
+	void PlayCardFromConsole(const TArray<FString>& Args, UWorld* ConsoleWorld)
+	{
+		const FString TeamArg = Args.IsValidIndex(3) ? Args[3] : FString();
+		const EArenaTeam Team = TeamArg.Equals(TEXT("J"), ESearchCase::IgnoreCase) ? EArenaTeam::J
+			: TeamArg.Equals(TEXT("A"), ESearchCase::IgnoreCase) ? EArenaTeam::A
+			: EArenaTeam::None;
+		AArenaPlayerController* Controller = FindLocalController(ConsoleWorld, Team);
+		if (!Controller || Args.Num() < 3)
+		{
+			UE_LOG(LogArene, Warning, TEXT("Usage : Arene.PoseCarte <emplacement 1-4> <X> <Y> [J|A] (aucun joueur local trouve pour ce camp ?)"));
+			return;
+		}
+		const int32 HandIndex = FCString::Atoi(*Args[0]) - 1;
+		const double X = FCString::Atod(*Args[1]);
+		const double Y = FCString::Atod(*Args[2]);
+
+		// Point du terrain à la verticale de (X, Y), sur le décor statique comme sous la souris.
+		UWorld* World = Controller->GetWorld();
+		FHitResult Hit;
+		const bool bHit = World->LineTraceSingleByObjectType(Hit, FVector(X, Y, 5000.0), FVector(X, Y, -5000.0),
+			FCollisionObjectQueryParams(ECC_WorldStatic));
+		const bool bSent = bHit && Controller->TryPlayCardAt(HandIndex, Hit.Location);
+		UE_LOG(LogArene, Log, TEXT("Arene.PoseCarte (%s) : emplacement %d en %s : %s"),
+			World->GetNetMode() == NM_Client ? TEXT("client") : TEXT("serveur"), HandIndex + 1,
+			bHit ? *Hit.Location.ToCompactString() : TEXT("(hors du terrain)"),
+			bSent ? TEXT("envoyee au serveur") : TEXT("refusee par le joueur"));
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs PlayCardCommand(
+		TEXT("Arene.PoseCarte"),
+		TEXT("Arene.PoseCarte <emplacement 1-4> <X> <Y> [J|A] : pose une carte de la main au point (X, Y) du terrain, ")
+		TEXT("pour le joueur local du camp indiqué (test sans souris)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&PlayCardFromConsole));
 }

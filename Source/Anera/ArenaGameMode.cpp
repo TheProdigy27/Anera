@@ -280,21 +280,22 @@ void AArenaGameMode::TryStartMatch()
 
 void AArenaGameMode::SpawnAIOpponents()
 {
-	if (GetNetMode() != NM_Standalone)
+	// Copie de la liste : l'IA du solo y ajoute son propre PlayerState.
+	const TArray<TObjectPtr<APlayerState>> HumanPlayers = GameState->PlayerArray;
+
+	if (GetNetMode() == NM_Standalone)
 	{
-		return;
+		SpawnAIOpponent(EArenaTeam::A, nullptr);
 	}
-	SpawnAIOpponent(EArenaTeam::A, nullptr);
 
 	if (bDemoMode)
 	{
-		for (APlayerState* Player : GameState->PlayerArray)
+		for (APlayerState* Player : HumanPlayers)
 		{
 			AArenaPlayerState* ArenaPlayer = Cast<AArenaPlayerState>(Player);
-			if (ArenaPlayer && ArenaPlayer->GetTeam() == EArenaTeam::J)
+			if (ArenaPlayer && ArenaPlayer->GetTeam() != EArenaTeam::None)
 			{
-				SpawnAIOpponent(EArenaTeam::J, ArenaPlayer);
-				break;
+				SpawnAIOpponent(ArenaPlayer->GetTeam(), ArenaPlayer);
 			}
 		}
 	}
@@ -312,7 +313,7 @@ AArenaAIOpponent* AArenaGameMode::SpawnAIOpponent(EArenaTeam Team, AArenaPlayerS
 	Opponent->SetControlledState(ExistingState);
 	Opponent->FinishSpawning(FTransform::Identity);
 	AIOpponents.Add(Opponent);
-	UE_LOG(LogArene, Log, TEXT("IA du camp %s"), Team == EArenaTeam::J ? TEXT("J (demo)") : TEXT("A"));
+	UE_LOG(LogArene, Log, TEXT("IA du camp %s%s"), Team == EArenaTeam::J ? TEXT("J") : TEXT("A"), ExistingState ? TEXT(" (demo)") : TEXT(""));
 	return Opponent;
 }
 

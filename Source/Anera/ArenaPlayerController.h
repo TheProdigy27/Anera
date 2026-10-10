@@ -49,6 +49,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Arene|Cartes")
 	void ConfirmCardPlacement();
 
+	// Pose la carte de cet emplacement de la main au point visé : vérification locale (élixir, zone),
+	// puis envoi au serveur. Faux si le placement est refusé ici. Sert au clic et à la commande Arene.PoseCarte.
+	bool TryPlayCardAt(int32 HandIndex, const FVector& Point);
+
 	// Emplacement de la carte choisie dans la main, ou INDEX_NONE.
 	UFUNCTION(BlueprintPure, Category = "Arene|Cartes")
 	int32 GetSelectedHandSlot() const { return SelectedHandSlot; }
