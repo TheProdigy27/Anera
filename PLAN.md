@@ -104,7 +104,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 - [x] **2.3** Interpolation des déplacements des unités côté client (CharacterMovement répliqué), réplication des projectiles et des effets d'impact.
 - [x] **2.4** Connexion par IP pour commencer : menu « Héberger » (`open <Map>?listen`) et « Rejoindre » (`open <IP>`). Port 7777 à ouvrir sur la box de l'hôte.
 - [x] **2.5** Ensuite, connexion sans ouvrir de ports : Epic Online Services (sessions et relais P2P, gratuit), ou Steam si tout le monde l'utilise. Vérifier la documentation de la version d'UE installée avant de choisir.
-- [ ] **2.6** Test avec latence simulée (`Net PktLag=100`, `Net PktLoss=2`) et entre 2 PC réels. Avec Steam, il faut deux comptes Steam différents (voir le Journal, 2.5). *Latence simulée : faite (Journal, 2.6). Reste le test entre 2 PC.*
+- [x] **2.6** Test avec latence simulée (`Net PktLag=100`, `Net PktLoss=2`) et entre 2 PC réels. Avec Steam, il faut deux comptes Steam différents (voir le Journal, 2.5).
 
 **Terminé quand** : deux PC jouent une partie complète, sans désynchronisation visible.
 
@@ -397,3 +397,8 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - deux comptes Steam, Steam lancé des deux côtés, le même zip sur les deux PC (une autre version n'apparaît pas dans la liste) ;
     - à vérifier : chrono, couronnes et PV identiques sur les deux écrans, cartes de l'invité posées sans attente visible, pas d'unité qui saute, zone du Mur de ronces visible des deux côtés, départ puis retour de l'invité, invitation Steam ;
     - en build Development, la console (touche `²` ou `~`) permet `stat net` (ping, pertes) et `Arene.MesureMouvement 20` chez l'invité.
+- 2026-10-10 — 2.6 faite : **Phase 2 terminée**. Partie complète entre deux PC, avec deux comptes Steam et le build de test corrigé (touches AZERTY) : la connexion par Steam, la synchronisation et les commandes fonctionnent.
+  - Remarque des joueurs : certaines unités au sol ne se battent pas entre elles. Explication probable, à confirmer avec eux, ce sont deux règles voulues :
+    - le Colosse de pierre et le Bélier ont pour cible « Bâtiments uniquement » (tableau 1.3) : ils ignorent toutes les unités, donc deux d'entre eux se croisent sans se toucher ;
+    - une unité garde la cible qu'elle frappe, bâtiment compris, jusqu'à sa destruction, même si un ennemi l'attaque (`AArenaUnitAIController::SelectTarget`).
+  - À trancher pendant l'équilibrage (phase 5) : garder ces règles, ou faire riposter les unités attaquées.
