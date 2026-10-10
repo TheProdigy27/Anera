@@ -99,7 +99,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 
 ## Phase 2 — Multijoueur à 2 (listen server)
 
-- [ ] **2.1** Tester le code de la phase 1 avec 2 joueurs en PIE : Net Mode « Play As Listen Server », 2 joueurs. Corriger tout ce qui n'est pas répliqué.
+- [x] **2.1** Tester le code de la phase 1 avec 2 joueurs en PIE : Net Mode « Play As Listen Server », 2 joueurs. Corriger tout ce qui n'est pas répliqué.
 - [ ] **2.2** Le premier connecté joue le camp J (hôte), le second le camp A. Caméra retournée pour A, chaque joueur ne peut déployer que dans sa zone.
 - [ ] **2.3** Interpolation des déplacements des unités côté client (CharacterMovement répliqué), réplication des projectiles et des effets d'impact.
 - [ ] **2.4** Connexion par IP pour commencer : menu « Héberger » (`open <Map>?listen`) et « Rejoindre » (`open <IP>`). Port 7777 à ouvrir sur la box de l'hôte.
@@ -224,3 +224,25 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - Avant les derniers correctifs, une unité est restée quelques secondes au bout d'un pont, sur la pente du tablier : à surveiller avec le log de diagnostic.
     - L'IA pose parfois ses unités sur le socle derrière ses tours (z = 50), qui est relié au terrain.
     - Le chrono de test court (60 s) déclenche le ×2 élixir dès le début : c'est normal, la règle est « dernière minute ».
+- 2026-10-10 — 2.1 faite : tests en PIE en Listen Server à 2 joueurs. Côté réplication, rien n'était à corriger.
+  - Vérifié chez le client :
+    - camp A et caméra retournée ;
+    - élixir, main et carte suivante (envoyés à lui seul), chrono, élixir ×2 et prolongations ;
+    - PV, état et réveil des bâtiments, avec les mêmes meshes Intact / Endommagé / Ruine visibles que sur le serveur ;
+    - unités (position, PV, carte, Vouivre comprise), couronnes, fin de partie et bannière « Victoire ! ».
+  - Pose d'une carte par le client : vérification locale, puis `ServerPlayCard`. La NavMesh, statique et enregistrée dans le niveau, est chargée chez le client grâce à `bAllowClientSideNavigation`. Le refus de la zone adverse marche dans les deux sens.
+  - Partie complète en mode démo réseau : 4 tours et le fort de J détruits, victoire de A 3 à 2. État final identique sur le serveur et le client, aucune unité bloquée.
+  - Outils de test :
+    - `bDemoMode` marche aussi en réseau : une IA joue à la place de chaque joueur humain ;
+    - commande console `Arene.PoseCarte <1-4> <X> <Y> [J|A]`, qui pose une carte comme un clic. Le camp choisit le joueur local, car en PIE la console de l'éditeur vise toujours l'hôte.
+  - Correctifs de gameplay trouvés pendant les tests :
+    - la portée des bâtiments est mesurée depuis leurs murs : deux Arbalétrières détruisaient une tour sans subir un tir ;
+    - le point d'approche d'un bâtiment est choisi autour de ses murs, sur la NavMesh et à portée : des unités restaient bloquées près d'une tour en ruine, dont le trou de NavMesh subsiste.
+  - Outillage MCP :
+    - mode réseau du PIE : `PlayNetMode` et `PlayNumberOfClients` sur `/Script/UnrealEd.Default__LevelEditorPlaySettings` (remis en Standalone, 1 joueur) ;
+    - les acteurs du client se lisent dans `/Game/Arene/Maps/UEDPIE_1_Arene.Arene:PersistentLevel.*` ;
+    - pour régler un Blueprint, passer le chemin du Blueprint lui-même à ObjectTools puis le compiler : une valeur posée sur `Default__<BP>_C` est perdue au lancement du PIE.
+  - Problèmes ouverts :
+    - le module n'a été recompilé que par Live Coding : l'éditeur proposera de le recompiler au prochain lancement ;
+    - un 3e joueur qui se connecterait recevrait le camp A : à refuser en 2.2 (le reste de 2.2 est déjà en place et vérifié) ;
+    - le trou de NavMesh d'une tour reste après sa destruction (NavMesh statique) : à revoir si l'emplacement d'une ruine doit devenir praticable.
