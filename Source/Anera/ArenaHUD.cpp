@@ -1,6 +1,7 @@
 #include "ArenaHUD.h"
 #include "ArenaBuilding.h"
 #include "ArenaCardData.h"
+#include "ArenaGameInstance.h"
 #include "ArenaGameState.h"
 #include "ArenaHealthComponent.h"
 #include "ArenaPlayerController.h"
@@ -66,6 +67,21 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 	{
 	case EArenaMatchPhase::Waiting:
 		Line(TEXT("En attente d'un adversaire…"), FLinearColor::White);
+		if (GetNetMode() == NM_ListenServer)
+		{
+			// Ce qu'il faut à l'adversaire pour rejoindre, et à l'hôte pour régler sa box.
+			const int32 Port = UArenaGameInstance::GetListenPort(GetWorld());
+			if (LocalAddresses.IsEmpty())
+			{
+				// Lues une fois : interroger les cartes réseau à chaque image coûterait pour rien.
+				LocalAddresses = FString::Join(UArenaGameInstance::GetLocalAddresses(), TEXT(", "));
+				LocalAddresses = LocalAddresses.IsEmpty() ? TEXT("inconnue") : LocalAddresses;
+			}
+			Line(FString::Printf(TEXT("Partie ouverte sur le port %d (UDP)."), Port), FLinearColor::White);
+			Line(FString::Printf(TEXT("Adresse sur le réseau local : %s"), *LocalAddresses), FLinearColor::White);
+			Line(TEXT("Même réseau : l'adversaire entre cette adresse. Par Internet : votre adresse IP publique,"), FLinearColor::Gray);
+			Line(FString::Printf(TEXT("et la box doit rediriger le port %d (UDP) vers l'adresse locale ci-dessus."), Port), FLinearColor::Gray);
+		}
 		break;
 	case EArenaMatchPhase::InProgress:
 		Line(FString::Printf(TEXT("Temps : %s"), *FormatTime(GameState->GetRemainingTime())), FLinearColor::White);
@@ -82,6 +98,25 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 		Line(TEXT("Élixir ×2"), FLinearColor(0.9f, 0.4f, 1.f));
 	}
 	Line(FString::Printf(TEXT("Couronnes : J %d - %d A"), GameState->GetCrowns(EArenaTeam::J), GameState->GetCrowns(EArenaTeam::A)), FLinearColor::White);
+
+	// En réseau, un camp sans joueur : l'adversaire s'est déconnecté et peut revenir.
+	if (GetNetMode() != NM_Standalone && GameState->IsMatchRunning())
+	{
+		int32 PlayersInTeams = 0;
+		for (const APlayerState* Other : GameState->PlayerArray)
+		{
+			const AArenaPlayerState* OtherArena = Cast<AArenaPlayerState>(Other);
+			PlayersInTeams += OtherArena && OtherArena->GetTeam() != EArenaTeam::None ? 1 : 0;
+		}
+		if (PlayersInTeams < 2)
+		{
+			Line(TEXT("Adversaire déconnecté : il peut revenir en rejoignant la partie."), FLinearColor::Yellow);
+		}
+	}
+	if (Controller && Controller->IsQuitPending())
+	{
+		Line(TEXT("Appuyez encore sur Échap pour quitter la partie."), FLinearColor::Yellow);
+	}
 
 	// Élixir et cartes du joueur local.
 	if (Player && Player->GetTeam() != EArenaTeam::None)
@@ -115,6 +150,7 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 		}
 		Line(TEXT("Touches 1-4 : choisir, clic gauche : poser, clic droit : annuler"), FLinearColor::Gray);
 	}
+	Line(GameState->IsMatchRunning() ? TEXT("Échap (deux fois) : quitter la partie") : TEXT("Échap : retour au menu"), FLinearColor::Gray);
 
 	// PV des bâtiments.
 	Line(FString(), FLinearColor::White);

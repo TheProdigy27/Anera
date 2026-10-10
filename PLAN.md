@@ -102,7 +102,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 - [x] **2.1** Tester le code de la phase 1 avec 2 joueurs en PIE : Net Mode « Play As Listen Server », 2 joueurs. Corriger tout ce qui n'est pas répliqué.
 - [x] **2.2** Le premier connecté joue le camp J (hôte), le second le camp A. Caméra retournée pour A, chaque joueur ne peut déployer que dans sa zone.
 - [x] **2.3** Interpolation des déplacements des unités côté client (CharacterMovement répliqué), réplication des projectiles et des effets d'impact.
-- [ ] **2.4** Connexion par IP pour commencer : menu « Héberger » (`open <Map>?listen`) et « Rejoindre » (`open <IP>`). Port 7777 à ouvrir sur la box de l'hôte.
+- [x] **2.4** Connexion par IP pour commencer : menu « Héberger » (`open <Map>?listen`) et « Rejoindre » (`open <IP>`). Port 7777 à ouvrir sur la box de l'hôte.
 - [ ] **2.5** Ensuite, connexion sans ouvrir de ports : Epic Online Services (sessions et relais P2P, gratuit), ou Steam si tout le monde l'utilise. Vérifier la documentation de la version d'UE installée avant de choisir.
 - [ ] **2.6** Test avec latence simulée (`Net PktLag=100`, `Net PktLoss=2`) et entre 2 PC réels.
 
@@ -279,3 +279,34 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - Console de l'éditeur via SlateInspector : `Snapshot` de la fenêtre principale, puis `Type` dans la zone de texte à droite du bouton « Cmd ».
     - Réglages PIE remis en Standalone, 1 joueur, et `bDemoMode` remis à faux.
   - Problème ouvert : un effet dont le paquet est perdu n'est pas renvoyé (RPC non fiable). C'est acceptable pour un visuel, mais à revoir si le disque du Mur de ronces manque trop souvent en 2.6 (`Net PktLoss`).
+- 2026-10-10 — 2.4 faite : menu d'accueil, héberger et rejoindre par adresse IP, retour au menu avec un message en cas d'échec.
+  - Carte `/Game/Arene/Maps/Menu` (vide) : c'est la carte par défaut du jeu (`GameDefaultMap`), là où le moteur revient aussi après une erreur réseau. `EditorStartupMap` reste l'arène, et lancer le PIE sur l'arène donne toujours le solo contre l'IA.
+  - Nouvelles classes :
+    - `UArenaGameInstance` (réglée dans `GameInstanceClass`) : l'instance du jeu, gardée d'une carte à l'autre. Elle gère Solo (`Arene` sans réseau), Héberger (`Arene?listen`, port 7777 en UDP), Rejoindre (`IP`, `IP:port` ou nom de machine) et le retour au menu. Elle capte les échecs réseau du moteur (`OnNetworkFailure`, `OnTravelFailure`) et laisse un message en français au menu. La dernière adresse saisie est gardée dans `Saved/Config/.../Game.ini`.
+    - `AArenaMenuGameMode`, `AArenaMenuPlayerController` (affiche le menu, interface seule), `UArenaMenuWidget` (relie les boutons, widgets trouvés par `BindWidget`).
+    - Assets : `WBP_MenuPrincipal` (`/Game/Arene/Interface`, boutons Solo, Héberger, Rejoindre avec champ d'adresse, Quitter), `BP_ArenaMenuGameMode`, `BP_ArenaMenuPlayerController`.
+  - En partie :
+    - Échap annule la carte choisie ; sinon il ramène au menu, avec un second appui dans les 3 s pendant la partie.
+    - L'hôte qui attend voit le port et ses adresses locales. Un bandeau signale un adversaire déconnecté.
+  - Déconnexion en cours de partie (problème ouvert en 2.2) :
+    - la partie continue et le camp reste libre ;
+    - qui rejoint reprend l'élixir (qui a continué de monter) et les cartes, dans le même ordre ;
+    - une arrivée après la fin de la partie est refusée (« Cette partie est terminée. »).
+  - Messages du menu : partie complète, partie terminée, hôte muet (« Aucune réponse… », au bout de 20 s, `ResolutionConnectionTimeout` du pilote réseau IP), adresse impossible, hôte parti. Le moteur envoie « Host closed the connection » dans la langue de l'hôte : on le remplace par « L'hôte a quitté la partie. ».
+  - Vérifié :
+    - PIE en Standalone à 2 puis 3 instances, depuis le menu :
+      - héberger, rejoindre `127.0.0.1`, partie à 2 avec le client en A ;
+      - départ du client puis retour (« reprend le camp A (elixir 10.0) ») ; départ de l'hôte, le client revient au menu avec le message ;
+      - le 3e joueur revient à son menu avec « La partie est complète (2 joueurs). » ;
+      - adresse vide, adresse impossible, et Solo qui annule une connexion en cours.
+    - Deux processus de jeu séparés (`-game`, hors éditeur) : connexion réelle en UDP sur le port 7777, Échap deux fois au clavier, retour du client, fermeture de l'hôte. Hôte muet : message au bout de 20 s.
+  - Outillage :
+    - En PIE, le moteur coupe les délais réseau (`bNoTimeouts`) : une connexion vers un hôte muet n'expire jamais. Tester ce cas hors PIE : `UnrealEditor.exe Anera.uproject 127.0.0.1:7790 -game -log`.
+    - En PIE, Échap arrête la session : la commande `Arene.QuitterPartie [J|A]` fait comme Échap pour le joueur local de ce camp.
+    - SlateInspector clique les widgets UMG des fenêtres PIE. Les fenêtres PIE se superposent : mettre la bonne au premier plan (`Windows`, `select`) avant de cliquer.
+    - Carte vide : créée par un script Python (`create_asset` avec `WorldFactory`), lancé par la commande `py` de la console de l'éditeur. Une copie de `/Engine/Maps/Entry` ne peut pas être enregistrée.
+    - Réglages PIE laissés comme trouvés en début de session : Listen Server, 2 joueurs.
+  - Problèmes ouverts :
+    - `SM_Collisions_Arene` a un petit trou (moins de 70 uu) devant chacune des 4 tours, vers (±550, ±700) : un clic à cet endroit ne pose rien. C'est le trou déjà repéré devant la tour droite de A en phase 1, présent en fait aux 4 tours. À corriger dans Blender.
+    - Jouer par Internet demande à l'hôte de rediriger le port 7777 (UDP) de sa box vers son PC, d'autoriser le jeu dans le pare-feu Windows et de donner son IP publique (le jeu n'affiche que l'adresse locale). Pas encore testé entre deux PC (2.6).
+    - Le menu sera complété en 3.4 : Deck, écran de fin avec Rejouer, habillage.

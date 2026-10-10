@@ -1,7 +1,9 @@
 #include "ArenaPlayerController.h"
 #include "Anera.h"
 #include "ArenaCardData.h"
+#include "ArenaGameInstance.h"
 #include "ArenaGameMode.h"
+#include "ArenaGameState.h"
 #include "ArenaLevel.h"
 #include "ArenaPlayerState.h"
 #include "Camera/CameraActor.h"
@@ -123,14 +125,44 @@ void AArenaPlayerController::HandleCardInput()
 			SelectHandSlot(Index);
 		}
 	}
-	if (WasInputKeyJustPressed(EKeys::RightMouseButton) || WasInputKeyJustPressed(EKeys::Escape))
+	if (WasInputKeyJustPressed(EKeys::RightMouseButton))
 	{
 		CancelCardSelection();
+	}
+	if (WasInputKeyJustPressed(EKeys::Escape))
+	{
+		HandleEscape();
 	}
 	if (WasInputKeyJustPressed(EKeys::LeftMouseButton))
 	{
 		ConfirmCardPlacement();
 	}
+}
+
+void AArenaPlayerController::HandleEscape()
+{
+	// Échap annule d'abord la carte choisie.
+	if (SelectedHandSlot != INDEX_NONE)
+	{
+		CancelCardSelection();
+		return;
+	}
+	// Pendant la partie, un second appui confirme : on n'abandonne pas sur une fausse manœuvre.
+	const AArenaGameState* ArenaGameState = GetWorld()->GetGameState<AArenaGameState>();
+	if (ArenaGameState && ArenaGameState->IsMatchRunning() && !IsQuitPending())
+	{
+		QuitRequestTime = GetWorld()->GetRealTimeSeconds();
+		return;
+	}
+	if (UArenaGameInstance* GameInstance = GetGameInstance<UArenaGameInstance>())
+	{
+		GameInstance->ReturnToMenu();
+	}
+}
+
+bool AArenaPlayerController::IsQuitPending() const
+{
+	return GetWorld()->GetRealTimeSeconds() - QuitRequestTime <= QuitConfirmDelay;
 }
 
 bool AArenaPlayerController::GetCardUnderCursor(UArenaCardData*& OutCard, FVector& OutCursorLocation) const
@@ -480,4 +512,28 @@ namespace
 		TEXT("Arene.PoseCarte <emplacement 1-4> <X> <Y> [J|A] : pose une carte de la main au point (X, Y) du terrain, ")
 		TEXT("pour le joueur local du camp indiqué (test sans souris)."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&PlayCardFromConsole));
+
+	// Commande de test : « Arene.QuitterPartie [J|A] » ramène au menu le joueur local de ce camp, comme Échap
+	// (en PIE, Échap arrête la session de l'éditeur au lieu d'arriver au jeu).
+	void QuitMatchFromConsole(const TArray<FString>& Args, UWorld* ConsoleWorld)
+	{
+		const FString TeamArg = Args.IsValidIndex(0) ? Args[0] : FString();
+		const EArenaTeam Team = TeamArg.Equals(TEXT("J"), ESearchCase::IgnoreCase) ? EArenaTeam::J
+			: TeamArg.Equals(TEXT("A"), ESearchCase::IgnoreCase) ? EArenaTeam::A
+			: EArenaTeam::None;
+		const AArenaPlayerController* Controller = FindLocalController(ConsoleWorld, Team);
+		UArenaGameInstance* GameInstance = Controller ? Controller->GetGameInstance<UArenaGameInstance>() : nullptr;
+		if (!GameInstance)
+		{
+			UE_LOG(LogArene, Warning, TEXT("Usage : Arene.QuitterPartie [J|A] (aucun joueur local trouve pour ce camp ?)"));
+			return;
+		}
+		UE_LOG(LogArene, Log, TEXT("Arene.QuitterPartie : retour au menu du joueur %s"), *Controller->GetName());
+		GameInstance->ReturnToMenu();
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs QuitMatchCommand(
+		TEXT("Arene.QuitterPartie"),
+		TEXT("Arene.QuitterPartie [J|A] : ramène au menu le joueur local de ce camp, comme Échap (test)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&QuitMatchFromConsole));
 }

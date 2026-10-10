@@ -33,4 +33,7 @@ private:
 
 	// Texte centré horizontalement sur ScreenX.
 	void DrawCenteredText(const FString& Text, const FLinearColor& Color, float ScreenX, float ScreenY, UFont* Font, float Scale);
+
+	// Adresses de cette machine sur le réseau local, affichées à l'hôte qui attend un adversaire.
+	FString LocalAddresses;
 };

@@ -23,6 +23,8 @@ class UStaticMesh;
 // Pose des cartes, en attendant l'interface (phase 3) : touches 1 à 4 pour choisir une carte de la main,
 // un disque suit la souris (vert : placement valide, rouge : refusé), clic gauche pour poser,
 // clic droit ou Échap pour annuler. Le placement est vérifié ici pour l'affichage, puis revérifié par le serveur.
+//
+// Échap sans carte choisie revient au menu : tout de suite avant ou après la partie, après un second appui pendant.
 UCLASS()
 class ANERA_API AArenaPlayerController : public APlayerController
 {
@@ -56,6 +58,10 @@ public:
 	// Emplacement de la carte choisie dans la main, ou INDEX_NONE.
 	UFUNCTION(BlueprintPure, Category = "Arene|Cartes")
 	int32 GetSelectedHandSlot() const { return SelectedHandSlot; }
+
+	// Vrai juste après un premier appui sur Échap pendant la partie : un second appui ramène au menu.
+	UFUNCTION(BlueprintPure, Category = "Arene|Menu")
+	bool IsQuitPending() const;
 
 protected:
 	virtual void BeginPlay() override;
@@ -92,9 +98,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Camera", meta = (ClampMin = "0", ClampMax = "0.4"))
 	float ScreenMarginBottom = 0.03f;
 
+	// Délai pour confirmer l'abandon de la partie par un second appui sur Échap.
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Menu", meta = (ClampMin = "0.5", Units = "s"))
+	float QuitConfirmDelay = 3.f;
+
 private:
 	// Touches de la pose de cartes (lues à chaque image).
 	void HandleCardInput();
+
+	// Échap : annule la carte choisie, sinon ramène au menu (avec confirmation pendant la partie).
+	void HandleEscape();
 
 	// Place, colore ou cache le disque de prévisualisation.
 	void UpdatePlacementPreview();
@@ -127,6 +140,9 @@ private:
 	FIntPoint CameraViewportSize = FIntPoint::ZeroValue;
 
 	int32 SelectedHandSlot = INDEX_NONE;
+
+	// Heure (temps réel) du premier appui sur Échap pendant la partie.
+	double QuitRequestTime = -1.0e9;
 
 	// Disque de prévisualisation, local à ce joueur (jamais répliqué).
 	UPROPERTY(Transient)

@@ -39,7 +39,7 @@ bool AArenaPlayerState::SpendElixir(float Cost)
 	return true;
 }
 
-void AArenaPlayerState::InitializeDeck(const TArray<UArenaCardData*>& Cards)
+void AArenaPlayerState::InitializeDeck(const TArray<UArenaCardData*>& Cards, bool bShuffle)
 {
 	check(HasAuthority());
 
@@ -52,7 +52,7 @@ void AArenaPlayerState::InitializeDeck(const TArray<UArenaCardData*>& Cards)
 		}
 	}
 	// Mélange de Fisher-Yates.
-	for (int32 Index = Shuffled.Num() - 1; Index > 0; --Index)
+	for (int32 Index = Shuffled.Num() - 1; bShuffle && Index > 0; --Index)
 	{
 		Shuffled.Swap(Index, FMath::RandRange(0, Index));
 	}
@@ -66,6 +66,13 @@ void AArenaPlayerState::InitializeDeck(const TArray<UArenaCardData*>& Cards)
 	}
 	NextCard = DrawPile.IsEmpty() ? nullptr : DrawPile[0];
 	OnHandChanged.Broadcast();
+}
+
+TArray<UArenaCardData*> AArenaPlayerState::GetDeckInOrder() const
+{
+	TArray<UArenaCardData*> Cards = ObjectPtrDecay(Hand);
+	Cards.Append(ObjectPtrDecay(DrawPile));
+	return Cards;
 }
 
 int32 AArenaPlayerState::FindCardInHand(const UArenaCardData* Card) const

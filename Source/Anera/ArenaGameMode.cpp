@@ -131,8 +131,9 @@ void AArenaGameMode::HandleBuildingDestroyed(AArenaBuilding* Building)
 
 namespace
 {
-	// Message renvoyé au joueur refusé (affiché par l'interface de la phase 3).
+	// Messages renvoyés au joueur refusé, affichés dans son menu.
 	const TCHAR* ArenaFullMessage = TEXT("La partie est complète (2 joueurs).");
+	const TCHAR* ArenaEndedMessage = TEXT("Cette partie est terminée.");
 }
 
 bool AArenaGameMode::IsFull() const
@@ -148,23 +149,38 @@ bool AArenaGameMode::IsFull() const
 	return HumanPlayers >= 2;
 }
 
+const TCHAR* AArenaGameMode::GetJoinRefusal() const
+{
+	if (IsFull())
+	{
+		return ArenaFullMessage;
+	}
+	const AArenaGameState* ArenaGameState = GetArenaGameState();
+	if (ArenaGameState && ArenaGameState->GetMatchPhase() == EArenaMatchPhase::Ended)
+	{
+		return ArenaEndedMessage;
+	}
+	return nullptr;
+}
+
 void AArenaGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
 {
 	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
-	if (ErrorMessage.IsEmpty() && IsFull())
+	const TCHAR* Refusal = ErrorMessage.IsEmpty() ? GetJoinRefusal() : nullptr;
+	if (Refusal)
 	{
-		ErrorMessage = ArenaFullMessage;
-		UE_LOG(LogArene, Log, TEXT("Connexion de %s refusee : partie complete"), *Address);
+		ErrorMessage = Refusal;
+		UE_LOG(LogArene, Log, TEXT("Connexion de %s refusee : %s"), *Address, Refusal);
 	}
 }
 
 APlayerController* AArenaGameMode::Login(UPlayer* NewPlayer, ENetRole InRemoteRole, const FString& Portal, const FString& Options,
 	const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
 {
-	if (IsFull())
+	if (const TCHAR* Refusal = GetJoinRefusal())
 	{
-		ErrorMessage = ArenaFullMessage;
-		UE_LOG(LogArene, Log, TEXT("Entree de %s refusee : partie complete"), *UGameplayStatics::ParseOption(Options, TEXT("Name")));
+		ErrorMessage = Refusal;
+		UE_LOG(LogArene, Log, TEXT("Entree de %s refusee : %s"), *UGameplayStatics::ParseOption(Options, TEXT("Name")), Refusal);
 		return nullptr;
 	}
 	return Super::Login(NewPlayer, InRemoteRole, Portal, Options, UniqueId, ErrorMessage);
@@ -193,7 +209,32 @@ void AArenaGameMode::PostLogin(APlayerController* NewPlayer)
 	}
 	NewState->SetTeam(bTeamJTaken ? EArenaTeam::A : EArenaTeam::J);
 
+	// Arrivée en cours de partie (retour après une déconnexion) : élixir et cartes tout de suite.
+	const AArenaGameState* ArenaGameState = GetArenaGameState();
+	if (ArenaGameState && ArenaGameState->IsMatchRunning())
+	{
+		InitializePlayerForMatch(NewState);
+	}
+
 	TryStartMatch();
+}
+
+void AArenaGameMode::Logout(AController* Exiting)
+{
+	const AArenaPlayerState* State = Exiting ? Exiting->GetPlayerState<AArenaPlayerState>() : nullptr;
+	const AArenaGameState* ArenaGameState = GetArenaGameState();
+	// Quand l'arène elle-même se ferme (l'hôte quitte), tous les joueurs sortent : rien à garder.
+	const bool bArenaClosing = GetWorld()->bIsTearingDown;
+	if (State && !State->IsABot() && State->GetTeam() != EArenaTeam::None && ArenaGameState && ArenaGameState->IsMatchRunning() && !bArenaClosing)
+	{
+		// La partie continue sans lui (ses bâtiments se défendent seuls) : qui rejoindra prendra sa place et ses cartes.
+		FArenaAbsentPlayer& Absent = AbsentPlayers.FindOrAdd(State->GetTeam());
+		Absent.Elixir = State->GetElixir();
+		Absent.Cards = State->GetDeckInOrder();
+		UE_LOG(LogArene, Log, TEXT("%s quitte la partie : le camp %s attend son retour"), *State->GetPlayerName(),
+			State->GetTeam() == EArenaTeam::J ? TEXT("J") : TEXT("A"));
+	}
+	Super::Logout(Exiting);
 }
 
 void AArenaGameMode::Tick(float DeltaSeconds)
@@ -221,6 +262,10 @@ void AArenaGameMode::Tick(float DeltaSeconds)
 		{
 			ArenaPlayer->AddElixir(ElixirGain);
 		}
+	}
+	for (TPair<EArenaTeam, FArenaAbsentPlayer>& Absent : AbsentPlayers)
+	{
+		Absent.Value.Elixir = FMath::Min(Absent.Value.Elixir + ElixirGain, MaxElixir);
 	}
 
 	if (ArenaGameState->GetRemainingTime() <= 0.f)
@@ -363,23 +408,40 @@ void AArenaGameMode::StartMatch()
 	SpawnAIOpponents();
 
 	AArenaGameState* ArenaGameState = GetArenaGameState();
+	AbsentPlayers.Reset();
 	for (APlayerState* Player : GameState->PlayerArray)
 	{
 		if (AArenaPlayerState* ArenaPlayer = Cast<AArenaPlayerState>(Player))
 		{
-			ArenaPlayer->InitializeElixir(StartElixir, MaxElixir);
-			const TArray<UArenaCardData*> Deck = GetDeckFor(ArenaPlayer);
-			if (Deck.Num() != 8)
-			{
-				UE_LOG(LogArene, Warning, TEXT("Deck de %s : %d cartes au lieu de 8 (DefaultDeck du GameMode)."), *ArenaPlayer->GetPlayerName(), Deck.Num());
-			}
-			ArenaPlayer->InitializeDeck(Deck);
+			InitializePlayerForMatch(ArenaPlayer);
 		}
 	}
 
 	ArenaGameState->SetDoubleElixir(false);
 	ArenaGameState->SetMatchPhase(EArenaMatchPhase::InProgress, MatchDuration);
 	UE_LOG(LogArene, Log, TEXT("Debut de la partie (%d joueurs, %.0f s)"), GameState->PlayerArray.Num(), MatchDuration);
+}
+
+void AArenaGameMode::InitializePlayerForMatch(AArenaPlayerState* Player)
+{
+	FArenaAbsentPlayer Absent;
+	if (AbsentPlayers.RemoveAndCopyValue(Player->GetTeam(), Absent))
+	{
+		// Retour dans un camp quitté en cours de partie : mêmes cartes dans le même ordre, élixir accumulé entre-temps.
+		Player->InitializeElixir(Absent.Elixir, MaxElixir);
+		Player->InitializeDeck(ObjectPtrDecay(Absent.Cards), false);
+		UE_LOG(LogArene, Log, TEXT("%s reprend le camp %s (elixir %.1f)"), *Player->GetPlayerName(),
+			Player->GetTeam() == EArenaTeam::J ? TEXT("J") : TEXT("A"), Player->GetElixir());
+		return;
+	}
+
+	Player->InitializeElixir(StartElixir, MaxElixir);
+	const TArray<UArenaCardData*> Deck = GetDeckFor(Player);
+	if (Deck.Num() != 8)
+	{
+		UE_LOG(LogArene, Warning, TEXT("Deck de %s : %d cartes au lieu de 8 (DefaultDeck du GameMode)."), *Player->GetPlayerName(), Deck.Num());
+	}
+	Player->InitializeDeck(Deck, true);
 }
 
 AArenaGameState* AArenaGameMode::GetArenaGameState() const

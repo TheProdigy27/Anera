@@ -11,6 +11,21 @@ class AArenaGameState;
 class AArenaPlayerState;
 class UArenaCardData;
 
+// Élixir et cartes d'un joueur parti en cours de partie, rendus à celui qui reprend son camp.
+USTRUCT()
+struct FArenaAbsentPlayer
+{
+	GENERATED_BODY()
+
+	// Continue de se remplir pendant l'absence, comme celui de l'adversaire.
+	UPROPERTY()
+	float Elixir = 0.f;
+
+	// La main puis la pile, dans l'ordre.
+	UPROPERTY()
+	TArray<TObjectPtr<UArenaCardData>> Cards;
+};
+
 // Règles de la partie : démarre et termine la partie, fait apparaître bâtiments et unités.
 // Le GameMode n'existe que sur le serveur, les clients n'en ont jamais de copie.
 UCLASS()
@@ -24,13 +39,17 @@ public:
 	// Appelée quand le monde commence à jouer (avant les BeginPlay des acteurs du niveau).
 	virtual void StartPlay() override;
 
-	// L'arène se joue à 2 : un troisième joueur est refusé (un ErrorMessage non vide refuse la connexion).
+	// L'arène se joue à 2 : un troisième joueur est refusé, comme un joueur qui arrive après la fin
+	// (un ErrorMessage non vide refuse la connexion, et le message est affiché dans le menu du joueur refusé).
 	// PreLogin, appelée avant le chargement de la carte chez le client, le refuse tôt. Login refait le contrôle :
 	// deux clients qui se connectent en même temps passent tous deux PreLogin avant d'avoir un PlayerState.
 	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 	virtual APlayerController* Login(UPlayer* NewPlayer, ENetRole InRemoteRole, const FString& Portal, const FString& Options,
 		const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 	virtual void PostLogin(APlayerController* NewPlayer) override;
+
+	// Un joueur qui quitte une partie en cours laisse sa place libre : élixir et cartes sont gardés pour son retour.
+	virtual void Logout(AController* Exiting) override;
 	virtual void Tick(float DeltaSeconds) override;
 
 	// Point d'entrée unique pour jouer une carte, appelé par ServerPlayCard (joueur humain)
@@ -40,6 +59,13 @@ public:
 protected:
 	// Vrai quand 2 joueurs humains sont déjà là (les IA du solo, des robots, ne comptent pas).
 	bool IsFull() const;
+
+	// Raison de refuser un nouveau joueur (partie complète ou terminée), ou nullptr s'il peut entrer.
+	const TCHAR* GetJoinRefusal() const;
+
+	// Élixir et cartes d'un joueur au lancement de la partie, ou à son arrivée en cours de partie
+	// (il reprend alors ce qu'avait laissé son camp, s'il y était déjà).
+	void InitializePlayerForMatch(AArenaPlayerState* Player);
 
 	// Fait apparaître un AArenaBuilding sur chaque SLOT_Tour_* et SLOT_Fort_* du niveau.
 	void SpawnBuildings();
@@ -128,4 +154,8 @@ protected:
 
 	UPROPERTY(Transient, VisibleInstanceOnly, Category = "Arene|Partie")
 	TArray<TObjectPtr<AArenaAIOpponent>> AIOpponents;
+
+	// Camps dont le joueur est parti en cours de partie.
+	UPROPERTY(Transient, VisibleInstanceOnly, Category = "Arene|Partie")
+	TMap<EArenaTeam, FArenaAbsentPlayer> AbsentPlayers;
 };

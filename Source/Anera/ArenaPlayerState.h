@@ -41,8 +41,12 @@ public:
 	// Serveur uniquement : retire Cost s'il y a assez d'élixir. Renvoie false sinon, sans rien retirer.
 	bool SpendElixir(float Cost);
 
-	// Serveur uniquement : mélange le deck, en tire la main (4 cartes) et la carte suivante.
-	void InitializeDeck(const TArray<UArenaCardData*>& Cards);
+	// Serveur uniquement : mélange le deck (sauf bShuffle = false), en tire la main (4 cartes) et la carte suivante.
+	void InitializeDeck(const TArray<UArenaCardData*>& Cards, bool bShuffle = true);
+
+	// Serveur uniquement : la main puis la pile, dans l'ordre. Rendues telles quelles par InitializeDeck(…, false)
+	// au joueur qui revient après une déconnexion.
+	TArray<UArenaCardData*> GetDeckInOrder() const;
 
 	// Position de la carte dans la main, ou INDEX_NONE si elle n'y est pas.
 	int32 FindCardInHand(const UArenaCardData* Card) const;
