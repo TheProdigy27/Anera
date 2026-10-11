@@ -35,6 +35,8 @@ AArenaUnit::AArenaUnit()
 	BodyMesh->SetRelativeScale3D(FVector(0.7f, 0.7f, 1.2f));
 	BodyMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	BodyMesh->SetGenerateOverlapEvents(false);
+	// Le surlignage de la zone de déploiement (un décal) colore le sol, pas les unités qui s'y trouvent.
+	BodyMesh->SetReceivesDecals(false);
 
 	HealthComponent = CreateDefaultSubobject<UArenaHealthComponent>(TEXT("Vie"));
 	AttackComponent = CreateDefaultSubobject<UArenaAttackComponent>(TEXT("Attaque"));

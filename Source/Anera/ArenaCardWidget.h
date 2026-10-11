@@ -12,8 +12,9 @@ class UTextBlock;
 // Une carte affichée par le HUD : icône, nom et coût en élixir. Sert aux 4 cartes de la main et à l'aperçu de
 // la carte suivante. La mise en page est dans le Widget Blueprint WBP_Carte (enfant de cette classe).
 //
-// Une carte de la main se choisit d'un clic, comme avec les touches 1 à 4. Le clic est consommé par l'interface :
-// il n'arrive pas au PlayerController, et ne pose donc pas la carte choisie avant.
+// Une carte de la main se glisse sur le terrain, ou se choisit d'un clic comme avec les touches 1 à 4 (voir
+// AArenaPlayerController::BeginCardDrag). Le clic est consommé par l'interface : il n'arrive pas au PlayerController,
+// et ne pose donc pas la carte choisie avant.
 UCLASS(Abstract)
 class ANERA_API UArenaCardWidget : public UUserWidget
 {

@@ -8,6 +8,7 @@
 
 class AArenaPlayerState;
 class ACameraActor;
+class ADecalActor;
 class AStaticMeshActor;
 class UArenaCardData;
 class UMaterialInstanceDynamic;
@@ -39,9 +40,13 @@ struct FArenaPendingCardPlay
 // pour le camp A, puis se place pour que les zones de déploiement et les bâtiments tiennent dans
 // l'écran, quel que soit son format. Camera_Arene elle-même n'est jamais modifiée.
 //
-// Pose des cartes : touches 1 à 4 ou clic sur une carte du HUD (UArenaCardWidget) pour choisir une carte de la main,
-// un disque suit la souris (vert : placement valide, rouge : refusé), clic gauche pour poser,
-// clic droit ou Échap pour annuler. Le placement est vérifié ici pour l'affichage, puis revérifié par le serveur.
+// Pose des cartes, de deux façons :
+// - glisser une carte du HUD (UArenaCardWidget) sur le terrain et la lâcher. Lâchée à un endroit refusé, elle revient
+//   dans la main ; relâchée sur la main sans l'avoir quittée, c'est un simple clic qui la choisit ;
+// - touches 1 à 4 ou clic sur une carte pour la choisir, puis clic gauche sur le terrain pour la poser.
+// Pendant ce temps, un disque suit la souris (vert : placement valide, rouge : refusé), et la zone de déploiement du
+// joueur est surlignée pour une carte d'unité. Clic droit ou Échap pour annuler.
+// Le placement est vérifié ici pour l'affichage, puis revérifié par le serveur.
 //
 // En réseau, la réponse du serveur arrive après un aller-retour (100 à 300 ms par Internet). En attendant, la carte
 // envoyée est « en attente » : son coût est déjà déduit de l'élixir affiché, elle ne peut pas être rejouée, et un
@@ -71,6 +76,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Arene|Cartes")
 	void CancelCardSelection();
+
+	// Bouton gauche enfoncé sur une carte du HUD : la carte est choisie et le glisser-déposer commence.
+	// Il se termine au relâchement du bouton, où que soit la souris (voir EndCardDrag).
+	UFUNCTION(BlueprintCallable, Category = "Arene|Cartes")
+	void BeginCardDrag(int32 HandIndex);
+
+	UFUNCTION(BlueprintPure, Category = "Arene|Cartes")
+	bool IsDraggingCard() const { return bDraggingCard; }
 
 	// Pose la carte choisie sous la souris, si le placement est valide.
 	UFUNCTION(BlueprintCallable, Category = "Arene|Cartes")
@@ -117,6 +130,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes")
 	FLinearColor PendingPreviewColor = FLinearColor(0.9f, 0.9f, 0.9f);
 
+	// Matériau de décal (M_ZoneDeploiement, paramètre « Color ») projeté sur la zone de déploiement du joueur tant
+	// qu'une carte d'unité est choisie. Vide : la zone n'est pas surlignée.
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes")
+	TObjectPtr<UMaterialInterface> DeploymentZoneMaterial;
+
+	// Couleur du surlignage (l'alpha règle sa transparence).
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes")
+	FLinearColor DeploymentZoneColor = FLinearColor(0.3f, 0.85f, 1.f, 0.3f);
+
 	// Une demande restée sans réponse au bout de ce délai est abandonnée (serveur perdu).
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes", meta = (ClampMin = "1", Units = "s"))
 	float PendingCardTimeout = 5.f;
@@ -152,6 +174,16 @@ private:
 
 	// Place, colore ou cache le disque de prévisualisation.
 	void UpdatePlacementPreview();
+
+	// Fin du glisser-déposer, au relâchement du bouton gauche : pose la carte, la rend à la main, ou garde le choix
+	// (simple clic sur la carte).
+	void EndCardDrag();
+
+	// Vrai si la souris est au-dessus de la main du HUD : un clic ou un relâchement y concerne l'interface, pas le terrain.
+	bool IsCursorOverHand() const;
+
+	// Montre la zone de déploiement du joueur tant qu'une carte d'unité est choisie, la cache sinon.
+	void UpdateZoneHighlight();
 
 	// Retire les cartes en attente dont la réponse est arrivée (ou trop ancienne), avec leur disque.
 	void UpdatePendingCardPlays();
@@ -190,6 +222,16 @@ private:
 	FIntPoint CameraViewportSize = FIntPoint::ZeroValue;
 
 	int32 SelectedHandSlot = INDEX_NONE;
+
+	// Glisser-déposer en cours, et la carte était-elle déjà choisie quand il a commencé ?
+	bool bDraggingCard = false;
+	bool bDragSlotWasSelected = false;
+
+	// Décal de la zone de déploiement, local à ce joueur (jamais répliqué), et camp pour lequel il a été placé.
+	UPROPERTY(Transient)
+	TObjectPtr<ADecalActor> ZoneHighlight;
+
+	EArenaTeam ZoneHighlightTeam = EArenaTeam::None;
 
 	// Heure (temps réel) du premier appui sur Échap pendant la partie.
 	double QuitRequestTime = -1.0e9;

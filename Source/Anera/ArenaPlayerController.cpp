@@ -4,15 +4,20 @@
 #include "ArenaGameInstance.h"
 #include "ArenaGameMode.h"
 #include "ArenaGameState.h"
+#include "ArenaHUD.h"
+#include "ArenaHUDWidget.h"
 #include "ArenaLevel.h"
 #include "ArenaPlayerState.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Components/DecalComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/DecalActor.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
+#include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -62,6 +67,7 @@ void AArenaPlayerController::PlayerTick(float DeltaTime)
 	UpdatePendingCardPlays();
 	HandleCardInput();
 	UpdatePlacementPreview();
+	UpdateZoneHighlight();
 }
 
 void AArenaPlayerController::ServerPlayCard_Implementation(UArenaCardData* Card, FVector_NetQuantize Location, int32 RequestId)
@@ -130,10 +136,61 @@ void AArenaPlayerController::SelectHandSlot(int32 HandIndex)
 void AArenaPlayerController::CancelCardSelection()
 {
 	SelectedHandSlot = INDEX_NONE;
+	bDraggingCard = false;
+}
+
+void AArenaPlayerController::BeginCardDrag(int32 HandIndex)
+{
+	bDragSlotWasSelected = SelectedHandSlot == HandIndex;
+	if (!bDragSlotWasSelected)
+	{
+		SelectHandSlot(HandIndex);
+	}
+	bDraggingCard = SelectedHandSlot == HandIndex;
+}
+
+void AArenaPlayerController::EndCardDrag()
+{
+	bDraggingCard = false;
+	if (SelectedHandSlot == INDEX_NONE)
+	{
+		return;
+	}
+	if (IsCursorOverHand())
+	{
+		// Relâchée sur la main : c'était un clic. Un clic sur la carte déjà choisie la rend.
+		if (bDragSlotWasSelected)
+		{
+			CancelCardSelection();
+		}
+		return;
+	}
+	// Lâchée sur le terrain : posée si le placement est valide, sinon elle revient dans la main.
+	UArenaCardData* Card = nullptr;
+	FVector CursorLocation;
+	if (GetCardUnderCursor(Card, CursorLocation))
+	{
+		TryPlayCardAt(SelectedHandSlot, CursorLocation);
+	}
+	CancelCardSelection();
+}
+
+bool AArenaPlayerController::IsCursorOverHand() const
+{
+	const AArenaHUD* ArenaHUD = GetHUD<AArenaHUD>();
+	const UArenaHUDWidget* HUDWidget = ArenaHUD ? ArenaHUD->GetHUDWidget() : nullptr;
+	float MouseX = 0.f;
+	float MouseY = 0.f;
+	return HUDWidget && GetMousePosition(MouseX, MouseY) && HUDWidget->IsOverHand(FVector2D(MouseX, MouseY));
 }
 
 void AArenaPlayerController::ConfirmCardPlacement()
 {
+	// Un clic sur le cadre de la main (entre deux cartes) ne vise pas le terrain caché derrière.
+	if (IsCursorOverHand())
+	{
+		return;
+	}
 	UArenaCardData* Card = nullptr;
 	FVector CursorLocation;
 	if (GetCardUnderCursor(Card, CursorLocation) && TryPlayCardAt(SelectedHandSlot, CursorLocation))
@@ -178,6 +235,14 @@ bool AArenaPlayerController::TryPlayCardAt(int32 HandIndex, const FVector& Point
 
 void AArenaPlayerController::HandleCardInput()
 {
+	// Glisser-déposer : la carte est lâchée quand le bouton gauche remonte. L'état du bouton est lu chez Slate, car
+	// le relâchement peut avoir lieu au-dessus de l'interface, et le jeu ne l'apprendrait pas.
+	if (bDraggingCard && FSlateApplication::IsInitialized()
+		&& !FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton))
+	{
+		EndCardDrag();
+	}
+
 	// Touches de chaque emplacement de la main. Unreal reconnaît la rangée du haut au caractère qu'elle produit :
 	// en AZERTY, sans Maj, elle donne & é " ' et non 1 2 3 4. Le pavé numérique marche quelle que soit la disposition.
 	static const FKey SlotKeys[][3] = {
@@ -263,7 +328,8 @@ void AArenaPlayerController::UpdatePlacementPreview()
 	UArenaCardData* Card = nullptr;
 	FVector CursorLocation;
 	const AArenaPlayerState* State = GetArenaPlayerState();
-	if (!State || !GetCardUnderCursor(Card, CursorLocation))
+	// Au-dessus de la main, la souris ne vise pas le terrain : pas de disque.
+	if (!State || IsCursorOverHand() || !GetCardUnderCursor(Card, CursorLocation))
 	{
 		if (PreviewActor)
 		{
@@ -301,6 +367,7 @@ AStaticMeshActor* AArenaPlayerController::SpawnPlacementDisc(const UArenaCardDat
 	MeshComponent->SetMobility(EComponentMobility::Movable);
 	MeshComponent->SetStaticMesh(PreviewMesh);
 	MeshComponent->SetCastShadow(false);
+	MeshComponent->SetReceivesDecals(false);
 	MeshComponent->CreateDynamicMaterialInstance(0, PreviewMaterial);
 	PlaceDisc(Disc, Card, GroundLocation, Color);
 	return Disc;
@@ -316,6 +383,65 @@ void AArenaPlayerController::PlaceDisc(AStaticMeshActor* Disc, const UArenaCardD
 	{
 		Material->SetVectorParameterValue(TEXT("Color"), Color);
 	}
+}
+
+void AArenaPlayerController::UpdateZoneHighlight()
+{
+	// Une carte d'unité est choisie (au clavier, au clic ou en la glissant) : seules les unités ont une zone, les sorts
+	// visent n'importe où.
+	const AArenaPlayerState* State = GetArenaPlayerState();
+	const TArray<UArenaCardData*> Hand = State ? State->GetHand() : TArray<UArenaCardData*>();
+	const UArenaCardData* Card = Hand.IsValidIndex(SelectedHandSlot) ? Hand[SelectedHandSlot] : nullptr;
+	const EArenaTeam Team = State ? State->GetTeam() : EArenaTeam::None;
+	const bool bShow = Card && Card->CardType == EArenaCardType::Unit && Team != EArenaTeam::None && DeploymentZoneMaterial;
+	if (!bShow)
+	{
+		if (ZoneHighlight)
+		{
+			ZoneHighlight->SetActorHiddenInGame(true);
+		}
+		return;
+	}
+
+	if (!ZoneHighlight || ZoneHighlightTeam != Team)
+	{
+		const AActor* Zone = ArenaLevel::FindDeploymentZone(this, Team);
+		const FBox Box = Zone ? Zone->GetComponentsBoundingBox(true) : FBox(ForceInit);
+		if (!Box.IsValid)
+		{
+			return;
+		}
+		if (!ZoneHighlight)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.ObjectFlags |= RF_Transient;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			// Un décal projette son matériau sur tout ce qui se trouve dans sa boîte, le long de son axe X : tourné vers
+			// le bas, il colore le sol en suivant le relief. ADecalActor l'oriente déjà vers le bas (-90° de tangage) ;
+			// SpawnActor compose la rotation donnée avec celle-là, d'où une rotation nulle ici.
+			ZoneHighlight = GetWorld()->SpawnActor<ADecalActor>(Box.GetCenter(), FRotator::ZeroRotator, SpawnParams);
+			if (!ZoneHighlight)
+			{
+				return;
+			}
+			UDecalComponent* Decal = ZoneHighlight->GetDecal();
+			Decal->SetDecalMaterial(DeploymentZoneMaterial);
+			if (UMaterialInstanceDynamic* Material = Decal->CreateDynamicMaterialInstance())
+			{
+				Material->SetVectorParameterValue(TEXT("Color"), DeploymentZoneColor);
+			}
+			// Toujours affiché, même quand il occupe peu de place à l'écran.
+			Decal->SetFadeScreenSize(0.f);
+		}
+		// Taille du décal : X = demi-profondeur de projection (le sol, les socles et le bas des bâtiments),
+		// Y et Z = demi-largeurs au sol. Avec la rotation vers le bas, Y reste l'axe Y du monde et Z devient l'axe X.
+		const FVector Extent = Box.GetExtent();
+		ZoneHighlight->SetActorLocation(Box.GetCenter());
+		ZoneHighlight->GetDecal()->DecalSize = FVector(Extent.Z + 300.f, Extent.Y, Extent.X);
+		ZoneHighlight->GetDecal()->MarkRenderStateDirty();
+		ZoneHighlightTeam = Team;
+	}
+	ZoneHighlight->SetActorHiddenInGame(false);
 }
 
 AArenaPlayerState* AArenaPlayerController::GetArenaPlayerState() const
@@ -334,6 +460,11 @@ void AArenaPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		PreviewActor->Destroy();
 		PreviewActor = nullptr;
+	}
+	if (ZoneHighlight)
+	{
+		ZoneHighlight->Destroy();
+		ZoneHighlight = nullptr;
 	}
 	for (const FArenaPendingCardPlay& Pending : PendingCardPlays)
 	{

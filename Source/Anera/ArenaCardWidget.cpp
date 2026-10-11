@@ -79,11 +79,14 @@ FReply UArenaCardWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, co
 {
 	if (HandIndex != INDEX_NONE && Card && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
+		// Choisit la carte et commence le glisser-déposer : le PlayerController suit ensuite la souris et le
+		// relâchement du bouton, sur le terrain comme sur l'interface.
 		if (AArenaPlayerController* Controller = GetOwningPlayer<AArenaPlayerController>())
 		{
-			Controller->SelectHandSlot(HandIndex);
+			Controller->BeginCardDrag(HandIndex);
 		}
-		// Handled : le clic s'arrête à l'interface et n'arrive pas au jeu.
+		// Handled, sans capturer la souris : le clic s'arrête à l'interface, mais les mouvements de la souris qui
+		// suivent arrivent au jeu dès qu'elle quitte la carte (le disque de prévisualisation la suit).
 		return FReply::Handled();
 	}
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);

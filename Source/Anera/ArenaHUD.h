@@ -20,6 +20,9 @@ class ANERA_API AArenaHUD : public AHUD
 public:
 	virtual void DrawHUD() override;
 
+	// Interface de la partie, ou null si HUDWidgetClass n'est pas réglée.
+	UArenaHUDWidget* GetHUDWidget() const { return HUDWidget; }
+
 protected:
 	virtual void BeginPlay() override;
 

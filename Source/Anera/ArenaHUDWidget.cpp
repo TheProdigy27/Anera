@@ -5,6 +5,7 @@
 #include "ArenaGameState.h"
 #include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
+#include "Blueprint/SlateBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Components/HorizontalBox.h"
@@ -39,6 +40,22 @@ void UArenaHUDWidget::NativeOnInitialized()
 	MessagePanel->SetVisibility(ESlateVisibility::Collapsed);
 	DoubleElixirBadge->SetVisibility(ESlateVisibility::Collapsed);
 	bShownDoubleElixir = false;
+}
+
+bool UArenaHUDWidget::IsOverHand(const FVector2D& ViewportPixel) const
+{
+	if (!HandPanel->IsVisible())
+	{
+		return false;
+	}
+	// Coins du cadre, de l'écran (coordonnées absolues de Slate) vers les pixels de la vue du jeu.
+	const FGeometry& Geometry = HandPanel->GetCachedGeometry();
+	FVector2D TopLeft;
+	FVector2D BottomRight;
+	FVector2D Unused;
+	USlateBlueprintLibrary::AbsoluteToViewport(this, Geometry.LocalToAbsolute(FVector2D::ZeroVector), TopLeft, Unused);
+	USlateBlueprintLibrary::AbsoluteToViewport(this, Geometry.LocalToAbsolute(Geometry.GetLocalSize()), BottomRight, Unused);
+	return ViewportPixel.X >= TopLeft.X && ViewportPixel.X <= BottomRight.X && ViewportPixel.Y >= TopLeft.Y && ViewportPixel.Y <= BottomRight.Y;
 }
 
 void UArenaHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -303,8 +320,8 @@ void UArenaHUDWidget::UpdateMessages(const AArenaPlayerController* Controller, c
 	}
 
 	SetTextIfChanged(HelpText, GameState->IsMatchRunning()
-		? TEXT("Touches 1 à 4 (ou clic sur une carte) : choisir · clic gauche sur le terrain : poser · clic droit : annuler\n"
-			"Échap deux fois : quitter la partie")
+		? TEXT("Glisser une carte sur le terrain pour la poser, ou la choisir (clic ou touches 1 à 4) puis cliquer sur le terrain\n"
+			"Clic droit : annuler · Échap deux fois : quitter la partie")
 		: TEXT("Échap : retour au menu"), ShownHelp);
 }
 

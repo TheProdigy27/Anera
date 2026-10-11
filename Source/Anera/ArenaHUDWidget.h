@@ -27,6 +27,10 @@ class ANERA_API UArenaHUDWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
+public:
+	// Le point (en pixels de la vue du jeu, comme APlayerController::GetMousePosition) est-il sur le cadre de la main ?
+	bool IsOverHand(const FVector2D& ViewportPixel) const;
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;

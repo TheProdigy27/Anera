@@ -114,7 +114,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 
 - [x] **3.1 HUD de partie** (`WBP_HUD`) : barre d'élixir segmentée, 4 cartes (icône, coût, grisée si l'élixir manque) et la suivante en aperçu, chrono, couronnes des deux camps, alerte « ×2 élixir » et « Prolongations ».
 - [x] **3.2 Barres de PV** au-dessus des bâtiments et des unités (WidgetComponent en espace écran), couleur de l'équipe.
-- [ ] **3.3 Glisser-déposer** des cartes depuis le HUD vers le terrain, avec la zone de déploiement surlignée pendant le glisser.
+- [x] **3.3 Glisser-déposer** des cartes depuis le HUD vers le terrain, avec la zone de déploiement surlignée pendant le glisser.
 - [ ] **3.4 Menus** : accueil (Solo contre IA, Héberger, Rejoindre, Deck, Quitter), écran de choix du deck (8 cartes parmi celles disponibles, sauvegardé en `SaveGame`), écran de fin (victoire ou défaite, couronnes, Rejouer).
 
 **Terminé quand** : on peut lancer, jouer et terminer une partie sans la console ni l'éditeur.
@@ -478,3 +478,34 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - **Envoyer `QUIT_EDITOR` par des appels directs** : SlateInspector `Click`, puis `Type`.
     - L'éditeur arrêté de force n'a pas enregistré ses réglages du PIE : `PlayNumberOfClients` était revenu à 1, il est remis à 2.
   - Outillage : `StartPIE` échoue (« Timed out waiting for PIE to start ») avec un préchauffage de 30 s, alors que le PIE démarre bien. Rester sous 25 s.
+- 2026-10-11 — 3.3 faite : glisser-déposer des cartes depuis le HUD, avec la zone de déploiement surlignée.
+  - Glisser :
+    - le bouton enfoncé sur une carte la choisit (`AArenaPlayerController::BeginCardDrag`), et le disque de prévisualisation suit la souris ;
+    - la carte est lâchée quand le bouton remonte. L'état du bouton est lu chez Slate (`FSlateApplication::GetPressedMouseButtons`), car le jeu ne voit pas un relâchement au-dessus de l'interface ;
+    - lâchée sur le terrain : posée si le placement est valide, sinon elle revient dans la main ;
+    - relâchée sur la main : c'est un simple clic. La carte reste choisie, ou est rendue si elle l'était déjà ;
+    - la carte ne capture pas la souris : ses mouvements arrivent au jeu dès qu'elle quitte la carte ;
+    - choisir au clavier puis cliquer sur le terrain marche toujours.
+  - Au-dessus du cadre de la main (`UArenaHUDWidget::IsOverHand`, en pixels de la vue comme `GetMousePosition`) : pas de disque de prévisualisation, et un clic ne pose rien sur le terrain caché derrière.
+  - Zone surlignée :
+    - tant qu'une carte d'unité est choisie (glissée, cliquée ou au clavier), un décal colore la zone de déploiement du joueur, rien pour un sort ;
+    - nouveau matériau `M_ZoneDeploiement` (`/Game/Arene/Interface`) : domaine Deferred Decal, translucide, paramètre « Color » vers la couleur et l'opacité. Il est réglé dans `BP_ArenaPlayerController` (`DeploymentZoneMaterial`, couleur `DeploymentZoneColor`) ;
+    - les unités et les disques de prévisualisation ne reçoivent pas le décal.
+  - Pièges rencontrés :
+    - `ADecalActor` oriente déjà son décal vers le bas (−90°), et `SpawnActor` compose la rotation donnée avec celle-là. Avec (−90, 0, 0), le décal projetait à l'horizontale et couvrait une bande verticale, fort compris : il faut le faire apparaître sans rotation ;
+    - avec la sortie émissive branchée, le décal devenait une bande laiteuse : seules la couleur et l'opacité restent branchées ;
+    - les cartes placées dans `WBP_HUD` gardaient leurs propres couleurs, copiées à leur création. Changer les valeurs par défaut de `WBP_Carte` par MCP ne s'y propage pas (les nouvelles couleurs de 3.1 n'étaient pas affichées) : elles sont maintenant réglées sur les 5 cartes de `WBP_HUD`.
+  - Aide du HUD mise à jour (glisser, ou choisir puis cliquer).
+  - Vérifié en PIE, en Listen Server à 2 joueurs (SlateInspector `Drag` : bouton enfoncé, déplacement, relâchement) :
+    - Bélier glissé sur le fort adverse : refusé, la carte revient dans la main sans rien dépenser ;
+    - Boule de feu glissée vers une tour adverse : posée, élixir 10 → 6, la carte suivante entre en main ;
+    - clic simple sur une carte d'unité : choisie et zone surlignée ; second clic : rendue, zone cachée ;
+    - chez le client (camp A) : zone surlignée sur sa moitié ;
+    - aucun avertissement du jeu dans le log.
+  - À vérifier à la main, avec une vraie souris :
+    - glisser une unité dans sa zone ;
+    - l'aspect du disque pendant le glisser ;
+    - un relâchement entre deux cartes.
+
+    `Drag` ne peut viser que des widgets, et ceux qui sont au-dessus du terrain (barres de PV) ne visent pas la zone de J.
+  - Problème ouvert : la correction de la rotation du décal est appliquée par Live Coding. Recompiler avec `Build.bat` à la prochaine fermeture de l'éditeur.
