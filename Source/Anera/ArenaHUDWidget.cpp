@@ -15,15 +15,6 @@
 #include "Components/TextBlock.h"
 #include "Engine/World.h"
 
-namespace
-{
-	FString FormatTime(float Seconds)
-	{
-		const int32 Total = FMath::CeilToInt(FMath::Max(0.f, Seconds));
-		return FString::Printf(TEXT("%d:%02d"), Total / 60, Total % 60);
-	}
-}
-
 void UArenaHUDWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
@@ -168,7 +159,7 @@ void UArenaHUDWidget::BuildElixirSegments(int32 Count)
 void UArenaHUDWidget::UpdateMatch(const AArenaGameState* GameState, EArenaTeam OwnTeam)
 {
 	FString Phase;
-	FString Timer = FormatTime(GameState->GetRemainingTime());
+	FString Timer = AArenaGameState::FormatTime(GameState->GetRemainingTime());
 	FLinearColor Color = TimerColor;
 	const bool bLastSeconds = GameState->GetRemainingTime() <= TimerWarningTime;
 	switch (GameState->GetMatchPhase())
@@ -187,7 +178,7 @@ void UArenaHUDWidget::UpdateMatch(const AArenaGameState* GameState, EArenaTeam O
 		break;
 	case EArenaMatchPhase::Ended:
 		Phase = TEXT("Partie terminée");
-		Timer = FormatTime(0.f);
+		Timer = AArenaGameState::FormatTime(0.f);
 		break;
 	}
 	SetTextIfChanged(PhaseText, Phase, ShownPhase);

@@ -10,9 +10,7 @@
 #include "ArenaPlayerState.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
-#include "Components/DecalComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Engine/DecalActor.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
@@ -65,7 +63,7 @@ void AArenaPlayerController::PlayerTick(float DeltaTime)
 	// PlayerTick ne tourne que sur la machine du joueur local : chacun gère sa propre caméra et sa prévisualisation.
 	UpdateArenaCamera();
 	UpdatePendingCardPlays();
-	// Hors du jeu (attente, écran de fin), aucune carte ne reste choisie : ni disque ni zone surlignée sous l'écran de fin.
+	// Hors du jeu (attente, écran de fin), aucune carte ne reste choisie : pas de disque sous l'écran de fin.
 	const AArenaGameState* ArenaGameState = GetWorld()->GetGameState<AArenaGameState>();
 	if (SelectedHandSlot != INDEX_NONE && (!ArenaGameState || !ArenaGameState->IsMatchRunning()))
 	{
@@ -73,7 +71,6 @@ void AArenaPlayerController::PlayerTick(float DeltaTime)
 	}
 	HandleCardInput();
 	UpdatePlacementPreview();
-	UpdateZoneHighlight();
 }
 
 void AArenaPlayerController::ServerPlayCard_Implementation(UArenaCardData* Card, FVector_NetQuantize Location, int32 RequestId)
@@ -387,7 +384,6 @@ AStaticMeshActor* AArenaPlayerController::SpawnPlacementDisc(const UArenaCardDat
 	MeshComponent->SetMobility(EComponentMobility::Movable);
 	MeshComponent->SetStaticMesh(PreviewMesh);
 	MeshComponent->SetCastShadow(false);
-	MeshComponent->SetReceivesDecals(false);
 	MeshComponent->CreateDynamicMaterialInstance(0, PreviewMaterial);
 	PlaceDisc(Disc, Card, GroundLocation, Color);
 	return Disc;
@@ -403,65 +399,6 @@ void AArenaPlayerController::PlaceDisc(AStaticMeshActor* Disc, const UArenaCardD
 	{
 		Material->SetVectorParameterValue(TEXT("Color"), Color);
 	}
-}
-
-void AArenaPlayerController::UpdateZoneHighlight()
-{
-	// Une carte d'unité est choisie (au clavier, au clic ou en la glissant) : seules les unités ont une zone, les sorts
-	// visent n'importe où.
-	const AArenaPlayerState* State = GetArenaPlayerState();
-	const TArray<UArenaCardData*> Hand = State ? State->GetHand() : TArray<UArenaCardData*>();
-	const UArenaCardData* Card = Hand.IsValidIndex(SelectedHandSlot) ? Hand[SelectedHandSlot] : nullptr;
-	const EArenaTeam Team = State ? State->GetTeam() : EArenaTeam::None;
-	const bool bShow = Card && Card->CardType == EArenaCardType::Unit && Team != EArenaTeam::None && DeploymentZoneMaterial;
-	if (!bShow)
-	{
-		if (ZoneHighlight)
-		{
-			ZoneHighlight->SetActorHiddenInGame(true);
-		}
-		return;
-	}
-
-	if (!ZoneHighlight || ZoneHighlightTeam != Team)
-	{
-		const AActor* Zone = ArenaLevel::FindDeploymentZone(this, Team);
-		const FBox Box = Zone ? Zone->GetComponentsBoundingBox(true) : FBox(ForceInit);
-		if (!Box.IsValid)
-		{
-			return;
-		}
-		if (!ZoneHighlight)
-		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.ObjectFlags |= RF_Transient;
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-			// Un décal projette son matériau sur tout ce qui se trouve dans sa boîte, le long de son axe X : tourné vers
-			// le bas, il colore le sol en suivant le relief. ADecalActor l'oriente déjà vers le bas (-90° de tangage) ;
-			// SpawnActor compose la rotation donnée avec celle-là, d'où une rotation nulle ici.
-			ZoneHighlight = GetWorld()->SpawnActor<ADecalActor>(Box.GetCenter(), FRotator::ZeroRotator, SpawnParams);
-			if (!ZoneHighlight)
-			{
-				return;
-			}
-			UDecalComponent* Decal = ZoneHighlight->GetDecal();
-			Decal->SetDecalMaterial(DeploymentZoneMaterial);
-			if (UMaterialInstanceDynamic* Material = Decal->CreateDynamicMaterialInstance())
-			{
-				Material->SetVectorParameterValue(TEXT("Color"), DeploymentZoneColor);
-			}
-			// Toujours affiché, même quand il occupe peu de place à l'écran.
-			Decal->SetFadeScreenSize(0.f);
-		}
-		// Taille du décal : X = demi-profondeur de projection (le sol, les socles et le bas des bâtiments),
-		// Y et Z = demi-largeurs au sol. Avec la rotation vers le bas, Y reste l'axe Y du monde et Z devient l'axe X.
-		const FVector Extent = Box.GetExtent();
-		ZoneHighlight->SetActorLocation(Box.GetCenter());
-		ZoneHighlight->GetDecal()->DecalSize = FVector(Extent.Z + 300.f, Extent.Y, Extent.X);
-		ZoneHighlight->GetDecal()->MarkRenderStateDirty();
-		ZoneHighlightTeam = Team;
-	}
-	ZoneHighlight->SetActorHiddenInGame(false);
 }
 
 AArenaPlayerState* AArenaPlayerController::GetArenaPlayerState() const
@@ -480,11 +417,6 @@ void AArenaPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		PreviewActor->Destroy();
 		PreviewActor = nullptr;
-	}
-	if (ZoneHighlight)
-	{
-		ZoneHighlight->Destroy();
-		ZoneHighlight = nullptr;
 	}
 	for (const FArenaPendingCardPlay& Pending : PendingCardPlays)
 	{

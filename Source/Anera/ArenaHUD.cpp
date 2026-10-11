@@ -22,12 +22,6 @@ namespace
 		TEXT("1 : affiche en plus de l'interface le panneau de débogage du HUD (phase, chrono, élixir, main, PV des bâtiments) ")
 		TEXT("et une étiquette (nom, PV) au-dessus de chaque unité et bâtiment."));
 
-	FString FormatTime(float Seconds)
-	{
-		const int32 Total = FMath::CeilToInt(FMath::Max(0.f, Seconds));
-		return FString::Printf(TEXT("%d:%02d"), Total / 60, Total % 60);
-	}
-
 	const TCHAR* StateName(EArenaBuildingState State)
 	{
 		switch (State)
@@ -105,10 +99,10 @@ void AArenaHUD::DrawDebugPanel(float Scale)
 		Line(TEXT("En attente d'un adversaire"), FLinearColor::White);
 		break;
 	case EArenaMatchPhase::InProgress:
-		Line(FString::Printf(TEXT("Temps : %s"), *FormatTime(GameState->GetRemainingTime())), FLinearColor::White);
+		Line(FString::Printf(TEXT("Temps : %s"), *AArenaGameState::FormatTime(GameState->GetRemainingTime())), FLinearColor::White);
 		break;
 	case EArenaMatchPhase::Overtime:
-		Line(FString::Printf(TEXT("PROLONGATIONS : %s"), *FormatTime(GameState->GetRemainingTime())), FLinearColor::Yellow);
+		Line(FString::Printf(TEXT("PROLONGATIONS : %s"), *AArenaGameState::FormatTime(GameState->GetRemainingTime())), FLinearColor::Yellow);
 		break;
 	case EArenaMatchPhase::Ended:
 		Line(TEXT("Partie terminée"), FLinearColor::White);

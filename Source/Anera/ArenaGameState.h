@@ -29,6 +29,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Arene|Partie")
 	float GetRemainingTime() const;
 
+	// Durée au format « m:ss » du chrono, arrondie à la seconde supérieure (0:01 jusqu'au bout).
+	static FString FormatTime(float Seconds);
+
 	UFUNCTION(BlueprintPure, Category = "Arene|Partie")
 	int32 GetCrowns(EArenaTeam Team) const;
 

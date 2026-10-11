@@ -114,7 +114,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 
 - [x] **3.1 HUD de partie** (`WBP_HUD`) : barre d'élixir segmentée, 4 cartes (icône, coût, grisée si l'élixir manque) et la suivante en aperçu, chrono, couronnes des deux camps, alerte « ×2 élixir » et « Prolongations ».
 - [x] **3.2 Barres de PV** au-dessus des bâtiments et des unités (WidgetComponent en espace écran), couleur de l'équipe.
-- [x] **3.3 Glisser-déposer** des cartes depuis le HUD vers le terrain, avec la zone de déploiement surlignée pendant le glisser.
+- [x] **3.3 Glisser-déposer** des cartes depuis le HUD vers le terrain, avec la zone de déploiement surlignée pendant le glisser (surlignage retiré ensuite à l'essai, voir Journal).
 - [x] **3.4 Menus** : accueil (Solo contre IA, Héberger, Rejoindre, Deck, Quitter), écran de choix du deck (8 cartes parmi celles disponibles, sauvegardé en `SaveGame`), écran de fin (victoire ou défaite, couronnes, Rejouer).
 
 **Terminé quand** : on peut lancer, jouer et terminer une partie sans la console ni l'éditeur.
@@ -550,3 +550,10 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - avec 8 cartes en tout, le seul deck possible contient les 8 : l'écran prendra son sens en phase 5 ;
     - un disque de sort au sol (Mur de ronces, 4 s) peut rester visible quelques instants après le début de la revanche ;
     - mode démo : les IA restent pour toutes les revanches de l'arène, même après `Arene.Demo 0`. Celle d'un joueur parti n'agit plus (correctif `IsValid` dans `AArenaAIOpponent::Think`, compilé dans le jeu packagé mais pas encore dans la DLL de l'éditeur : recompiler avec `Build.bat` à la prochaine fermeture).
+- 2026-10-11 — Retouche de 3.3 : la zone de déploiement n'est plus surlignée (retour du développeur après essai : elle éclaircissait trop le terrain, et rester à 10 % d'opacité ne suffisait pas à la rendre utile).
+  - Retirés : `UpdateZoneHighlight`, le décal `ZoneHighlight`, les réglages `DeploymentZoneMaterial` et `DeploymentZoneColor` d'`AArenaPlayerController`, et les `SetReceivesDecals(false)` des unités et des disques. Le disque vert ou rouge sous la souris suffit à montrer où l'on peut poser.
+  - `M_ZoneDeploiement` n'est plus référencé, mais il est encore dans `/Game/Arene/Interface` : sa suppression par MCP a été refusée par le filtre de sécurité. Il reste à le supprimer à la main dans le Content Browser.
+  - Piège : une valeur par défaut changée par ObjectTools sur le CDO d'un Blueprint n'arrive pas aux acteurs créés tant que le Blueprint n'est pas recompilé. Le PIE gardait l'ancienne couleur alors que le CDO avait la nouvelle.
+  - `FormatTime` était défini deux fois, à l'identique, dans `ArenaHUD.cpp` et `ArenaHUDWidget.cpp` (espaces de noms anonymes). Le build unity, qui regroupe les fichiers non modifiés dans un seul `Module.Anera.cpp`, refusait la double définition. La fonction est maintenant unique : `AArenaGameState::FormatTime`. Le jeu compile aussi avec `-DisableAdaptiveUnity`, donc tous les fichiers ensemble.
+  - Module recompilé par `Build.bat`, éditeur fermé puis relancé. La correction `IsValid` de l'IA (problème ouvert de 3.4) est maintenant dans la DLL de l'éditeur.
+  - Vérifié en PIE, en Listen Server à 2 joueurs : une carte d'unité choisie ne colore plus le sol, le disque de prévisualisation s'affiche toujours, le chrono aussi, et le log n'a aucun avertissement.

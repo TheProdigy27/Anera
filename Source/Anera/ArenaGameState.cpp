@@ -17,6 +17,12 @@ float AArenaGameState::GetRemainingTime() const
 	return static_cast<float>(FMath::Max(0.0, PhaseEndTime - GetServerWorldTimeSeconds()));
 }
 
+FString AArenaGameState::FormatTime(float Seconds)
+{
+	const int32 Total = FMath::CeilToInt(FMath::Max(0.f, Seconds));
+	return FString::Printf(TEXT("%d:%02d"), Total / 60, Total % 60);
+}
+
 int32 AArenaGameState::GetCrowns(EArenaTeam Team) const
 {
 	switch (Team)

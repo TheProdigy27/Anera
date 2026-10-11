@@ -8,7 +8,6 @@
 
 class AArenaPlayerState;
 class ACameraActor;
-class ADecalActor;
 class AStaticMeshActor;
 class UArenaCardData;
 class UMaterialInstanceDynamic;
@@ -44,8 +43,7 @@ struct FArenaPendingCardPlay
 // - glisser une carte du HUD (UArenaCardWidget) sur le terrain et la lâcher. Lâchée à un endroit refusé, elle revient
 //   dans la main ; relâchée sur la main sans l'avoir quittée, c'est un simple clic qui la choisit ;
 // - touches 1 à 4 ou clic sur une carte pour la choisir, puis clic gauche sur le terrain pour la poser.
-// Pendant ce temps, un disque suit la souris (vert : placement valide, rouge : refusé), et la zone de déploiement du
-// joueur est surlignée pour une carte d'unité. Clic droit ou Échap pour annuler.
+// Pendant ce temps, un disque suit la souris (vert : placement valide, rouge : refusé). Clic droit ou Échap pour annuler.
 // Le placement est vérifié ici pour l'affichage, puis revérifié par le serveur.
 //
 // En réseau, la réponse du serveur arrive après un aller-retour (100 à 300 ms par Internet). En attendant, la carte
@@ -134,15 +132,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes")
 	FLinearColor PendingPreviewColor = FLinearColor(0.9f, 0.9f, 0.9f);
 
-	// Matériau de décal (M_ZoneDeploiement, paramètre « Color ») projeté sur la zone de déploiement du joueur tant
-	// qu'une carte d'unité est choisie. Vide : la zone n'est pas surlignée.
-	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes")
-	TObjectPtr<UMaterialInterface> DeploymentZoneMaterial;
-
-	// Couleur du surlignage (l'alpha règle sa transparence).
-	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes")
-	FLinearColor DeploymentZoneColor = FLinearColor(0.3f, 0.85f, 1.f, 0.3f);
-
 	// Une demande restée sans réponse au bout de ce délai est abandonnée (serveur perdu).
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes", meta = (ClampMin = "1", Units = "s"))
 	float PendingCardTimeout = 5.f;
@@ -189,9 +178,6 @@ private:
 	// Vrai si la souris est au-dessus de la main du HUD : un clic ou un relâchement y concerne l'interface, pas le terrain.
 	bool IsCursorOverHand() const;
 
-	// Montre la zone de déploiement du joueur tant qu'une carte d'unité est choisie, la cache sinon.
-	void UpdateZoneHighlight();
-
 	// Retire les cartes en attente dont la réponse est arrivée (ou trop ancienne), avec leur disque.
 	void UpdatePendingCardPlays();
 
@@ -233,12 +219,6 @@ private:
 	// Glisser-déposer en cours, et la carte était-elle déjà choisie quand il a commencé ?
 	bool bDraggingCard = false;
 	bool bDragSlotWasSelected = false;
-
-	// Décal de la zone de déploiement, local à ce joueur (jamais répliqué), et camp pour lequel il a été placé.
-	UPROPERTY(Transient)
-	TObjectPtr<ADecalActor> ZoneHighlight;
-
-	EArenaTeam ZoneHighlightTeam = EArenaTeam::None;
 
 	// Heure (temps réel) du premier appui sur Échap pendant la partie.
 	double QuitRequestTime = -1.0e9;
