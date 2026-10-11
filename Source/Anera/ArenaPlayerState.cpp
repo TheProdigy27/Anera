@@ -112,6 +112,31 @@ void AArenaPlayerState::ConfirmCardRequest(int32 RequestId)
 	ForceNetUpdate();
 }
 
+void AArenaPlayerState::SetChosenDeck(const TArray<UArenaCardData*>& Cards)
+{
+	check(HasAuthority());
+	ChosenDeck = Cards;
+}
+
+void AArenaPlayerState::SetWantsRematch(bool bInWantsRematch)
+{
+	check(HasAuthority());
+	bWantsRematch = bInWantsRematch;
+	// L'adversaire attend peut-être cette réponse sur son écran de fin.
+	ForceNetUpdate();
+}
+
+void AArenaPlayerState::ResetForNewMatch()
+{
+	check(HasAuthority());
+	Elixir = 0.f;
+	Hand.Reset();
+	DrawPile.Reset();
+	NextCard = nullptr;
+	bWantsRematch = false;
+	OnHandChanged.Broadcast();
+}
+
 void AArenaPlayerState::OnRep_Cards()
 {
 	OnHandChanged.Broadcast();
@@ -121,6 +146,7 @@ void AArenaPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AArenaPlayerState, Team);
+	DOREPLIFETIME(AArenaPlayerState, bWantsRematch);
 	// COND_OwnerOnly : envoyé uniquement au joueur à qui appartient ce PlayerState.
 	DOREPLIFETIME_CONDITION(AArenaPlayerState, Elixir, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(AArenaPlayerState, MaxElixir, COND_OwnerOnly);

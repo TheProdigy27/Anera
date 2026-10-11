@@ -35,7 +35,7 @@ public:
 
 	AArenaPlayerState* GetOpponentState() const { return OpponentState; }
 
-	// Deck propre à l'IA ; vide = le deck par défaut du GameMode.
+	// Deck propre à l'IA ; vide = le deck par défaut (DefaultDeck de BP_ArenaGameInstance).
 	TArray<UArenaCardData*> GetDeck() const { return ObjectPtrDecay(Deck); }
 
 protected:

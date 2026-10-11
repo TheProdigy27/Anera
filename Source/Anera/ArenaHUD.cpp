@@ -74,7 +74,11 @@ void AArenaHUD::DrawHUD()
 		DrawWorldLabels(Scale);
 		DrawDebugPanel(Scale);
 	}
-	DrawEndBanner(Scale);
+	// Avec l'interface, c'est son écran de fin qui annonce le résultat.
+	if (!HUDWidget)
+	{
+		DrawEndBanner(Scale);
+	}
 }
 
 void AArenaHUD::DrawDebugPanel(float Scale)

@@ -1,5 +1,6 @@
 #include "ArenaMenuWidget.h"
 #include "Anera.h"
+#include "ArenaDeckWidget.h"
 #include "ArenaGameInstance.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/ButtonSlot.h"
@@ -31,7 +32,10 @@ void UArenaMenuWidget::NativeOnInitialized()
 	HostButton->OnClicked.AddDynamic(this, &UArenaMenuWidget::HandleHostClicked);
 	RefreshButton->OnClicked.AddDynamic(this, &UArenaMenuWidget::HandleRefreshClicked);
 	JoinButton->OnClicked.AddDynamic(this, &UArenaMenuWidget::HandleJoinClicked);
+	DeckButton->OnClicked.AddDynamic(this, &UArenaMenuWidget::HandleDeckClicked);
 	QuitButton->OnClicked.AddDynamic(this, &UArenaMenuWidget::HandleQuitClicked);
+	DeckPanel->OnClosed.BindUObject(this, &UArenaMenuWidget::HandleDeckClosed);
+	DeckPanel->SetVisibility(ESlateVisibility::Collapsed);
 	AddressBox->OnTextCommitted.AddDynamic(this, &UArenaMenuWidget::HandleAddressCommitted);
 }
 
@@ -163,6 +167,26 @@ void UArenaMenuWidget::HandleJoinClicked()
 	bBusy = true;
 	ShowMessage(FText::Format(LOCTEXT("Connecting", "Connexion à {0}… (abandon au bout d'une vingtaine de secondes si l'hôte ne répond pas)"),
 		FText::FromString(Address.TrimStartAndEnd())), false);
+}
+
+void UArenaMenuWidget::HandleDeckClicked()
+{
+	MainPanel->SetVisibility(ESlateVisibility::Collapsed);
+	// Visible avant Open : l'écran du deck prend alors le focus clavier (pour Échap).
+	DeckPanel->SetVisibility(ESlateVisibility::Visible);
+	DeckPanel->Open();
+}
+
+void UArenaMenuWidget::HandleDeckClosed(bool bSaved)
+{
+	DeckPanel->SetVisibility(ESlateVisibility::Collapsed);
+	MainPanel->SetVisibility(ESlateVisibility::Visible);
+	// Le bouton « Deck » qui avait le focus est de nouveau là : le clavier revient au menu.
+	DeckButton->SetFocus();
+	if (bSaved)
+	{
+		ShowMessage(LOCTEXT("DeckSaved", "Deck enregistré : il servira à vos prochaines parties."), false);
+	}
 }
 
 void UArenaMenuWidget::HandleQuitClicked()

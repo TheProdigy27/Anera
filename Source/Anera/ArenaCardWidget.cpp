@@ -25,8 +25,7 @@ void UArenaCardWidget::SetCard(UArenaCardData* InCard)
 		SetVisibility(ESlateVisibility::Hidden);
 		return;
 	}
-	// L'aperçu de la carte suivante laisse passer les clics (HitTestInvisible) ; une carte de la main les reçoit.
-	SetVisibility(HandIndex == INDEX_NONE ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Visible);
+	SetVisibility(GetCardVisibility());
 	NameText->SetText(Card->DisplayName);
 	CostText->SetText(FText::AsNumber(Card->ElixirCost));
 	CardFace->SetBrushColor(Card->CardType == EArenaCardType::Spell ? SpellFaceColor : UnitFaceColor);
@@ -51,8 +50,25 @@ void UArenaCardWidget::SetHandIndex(int32 InHandIndex)
 	}
 	if (Card)
 	{
-		SetVisibility(HandIndex == INDEX_NONE ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Visible);
+		SetVisibility(GetCardVisibility());
 	}
+}
+
+void UArenaCardWidget::SetOnClicked(FOnCardClicked InOnClicked)
+{
+	OnClicked = InOnClicked;
+	// Curseur en forme de main au survol : la carte se clique.
+	SetCursor(EMouseCursor::Hand);
+	if (Card)
+	{
+		SetVisibility(GetCardVisibility());
+	}
+}
+
+ESlateVisibility UArenaCardWidget::GetCardVisibility() const
+{
+	// L'aperçu de la carte suivante laisse passer les clics (HitTestInvisible) ; une carte de la main ou du deck les reçoit.
+	return HandIndex != INDEX_NONE || OnClicked.IsBound() ? ESlateVisibility::Visible : ESlateVisibility::HitTestInvisible;
 }
 
 void UArenaCardWidget::SetState(bool bInSelected, bool bInPlayable, bool bInPending)
@@ -77,6 +93,11 @@ void UArenaCardWidget::ApplyState()
 
 FReply UArenaCardWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
+	if (OnClicked.IsBound() && Card && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		OnClicked.Execute(this);
+		return FReply::Handled();
+	}
 	if (HandIndex != INDEX_NONE && Card && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
 		// Choisit la carte et commence le glisser-déposer : le PlayerController suit ensuite la souris et le

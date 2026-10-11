@@ -7,6 +7,7 @@
 #include "Types/SlateEnums.h"
 #include "ArenaMenuWidget.generated.h"
 
+class UArenaDeckWidget;
 class UArenaGameInstance;
 class UEditableTextBox;
 class UScrollBox;
@@ -33,7 +34,7 @@ private:
 };
 
 // Menu d'accueil : Solo contre l'IA, Héberger, liste des parties ouvertes (Steam, ou réseau local sans Steam),
-// Rejoindre par adresse IP (sans Steam), Quitter.
+// Rejoindre par adresse IP (sans Steam), Deck (écran de choix du deck, UArenaDeckWidget), Quitter.
 // La mise en page est faite dans le Widget Blueprint WBP_MenuPrincipal (enfant de cette classe) ; le C++ relie
 // ses boutons aux actions de UArenaGameInstance et remplit la liste des parties.
 //
@@ -77,8 +78,20 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> JoinButton;
 
+	// Ouvre l'écran du deck à la place du menu.
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> DeckButton;
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> QuitButton;
+
+	// Le menu lui-même, masqué pendant le choix du deck.
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UWidget> MainPanel;
+
+	// Écran de choix du deck (WBP_Deck), masqué tant qu'il n'est pas ouvert.
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UArenaDeckWidget> DeckPanel;
 
 	// Adresse de l'hôte : « 192.168.1.20 » ou « 192.168.1.20:7777 ». Entrée lance la connexion.
 	UPROPERTY(meta = (BindWidget))
@@ -116,12 +129,16 @@ private:
 	void HandleJoinClicked();
 
 	UFUNCTION()
+	void HandleDeckClicked();
+
+	UFUNCTION()
 	void HandleQuitClicked();
 
 	UFUNCTION()
 	void HandleAddressCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
 	void HandleSessionChosen(int32 SessionIndex);
+	void HandleDeckClosed(bool bSaved);
 	void HandleMenuMessage(const FText& Message, bool bError);
 
 	// Recherche automatique (minuterie), suspendue pendant une création de partie ou une connexion.

@@ -66,6 +66,21 @@ public:
 	// Serveur uniquement : la demande RequestId du joueur est traitée. Main, élixir et numéro partent tout de suite.
 	void ConfirmCardRequest(int32 RequestId);
 
+	// Serveur uniquement : deck choisi par le joueur dans le menu, reçu à son arrivée et déjà vérifié
+	// (vide : deck par défaut). Il est distribué à chaque début de partie, revanches comprises.
+	void SetChosenDeck(const TArray<UArenaCardData*>& Cards);
+	TArray<UArenaCardData*> GetChosenDeck() const { return ObjectPtrDecay(ChosenDeck); }
+
+	// Vrai si le joueur a demandé une revanche sur l'écran de fin. Visible de tous : l'adversaire le voit.
+	UFUNCTION(BlueprintPure, Category = "Arene|Joueur")
+	bool WantsRematch() const { return bWantsRematch; }
+
+	// Serveur uniquement.
+	void SetWantsRematch(bool bInWantsRematch);
+
+	// Serveur uniquement, à la revanche : plus de cartes ni d'élixir jusqu'à la distribution du début de partie.
+	void ResetForNewMatch();
+
 	// Serveur et propriétaire : la main ou la carte suivante ont changé (pour l'interface).
 	UPROPERTY(BlueprintAssignable, Category = "Arene|Joueur")
 	FArenaHandChangedSignature OnHandChanged;
@@ -100,6 +115,13 @@ protected:
 	// ce numéro passer, sa main et son élixir tiennent déjà compte de la carte (voir AArenaPlayerController).
 	UPROPERTY(Replicated, VisibleInstanceOnly, Category = "Arene")
 	int32 LastCardRequestId = 0;
+
+	// Connu du serveur seulement.
+	UPROPERTY(VisibleInstanceOnly, Category = "Arene")
+	TArray<TObjectPtr<UArenaCardData>> ChosenDeck;
+
+	UPROPERTY(Replicated, VisibleInstanceOnly, Category = "Arene")
+	bool bWantsRematch = false;
 
 	UFUNCTION()
 	void OnRep_Cards();

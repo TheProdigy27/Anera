@@ -52,7 +52,8 @@ void AArenaAIOpponent::Think()
 {
 	const AArenaGameState* GameState = GetWorld()->GetGameState<AArenaGameState>();
 	AArenaGameMode* GameMode = GetWorld()->GetAuthGameMode<AArenaGameMode>();
-	if (!OpponentState || !GameMode || !GameState || !GameState->IsMatchRunning())
+	// IsValid : en mode démo, le PlayerState du joueur remplacé est détruit s'il quitte la partie.
+	if (!IsValid(OpponentState) || !GameMode || !GameState || !GameState->IsMatchRunning())
 	{
 		return;
 	}

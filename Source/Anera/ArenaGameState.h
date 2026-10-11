@@ -43,6 +43,9 @@ public:
 	void SetWinner(EArenaTeam NewWinner);
 	void SetDoubleElixir(bool bEnabled);
 
+	// Serveur uniquement, à la revanche : couronnes à zéro, pas de vainqueur, et retour à l'attente des joueurs.
+	void ResetMatch();
+
 	// Serveur : fait jouer un effet visuel (impact, zone de sort) chez tous les joueurs, hôte compris.
 	// Les effets d'une même image partent ensemble à l'image suivante : un RPC non fiable pour les coups et
 	// les impacts, un RPC fiable pour les sorts.

@@ -115,7 +115,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 - [x] **3.1 HUD de partie** (`WBP_HUD`) : barre d'élixir segmentée, 4 cartes (icône, coût, grisée si l'élixir manque) et la suivante en aperçu, chrono, couronnes des deux camps, alerte « ×2 élixir » et « Prolongations ».
 - [x] **3.2 Barres de PV** au-dessus des bâtiments et des unités (WidgetComponent en espace écran), couleur de l'équipe.
 - [x] **3.3 Glisser-déposer** des cartes depuis le HUD vers le terrain, avec la zone de déploiement surlignée pendant le glisser.
-- [ ] **3.4 Menus** : accueil (Solo contre IA, Héberger, Rejoindre, Deck, Quitter), écran de choix du deck (8 cartes parmi celles disponibles, sauvegardé en `SaveGame`), écran de fin (victoire ou défaite, couronnes, Rejouer).
+- [x] **3.4 Menus** : accueil (Solo contre IA, Héberger, Rejoindre, Deck, Quitter), écran de choix du deck (8 cartes parmi celles disponibles, sauvegardé en `SaveGame`), écran de fin (victoire ou défaite, couronnes, Rejouer).
 
 **Terminé quand** : on peut lancer, jouer et terminer une partie sans la console ni l'éditeur.
 
@@ -509,3 +509,44 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 
     `Drag` ne peut viser que des widgets, et ceux qui sont au-dessus du terrain (barres de PV) ne visent pas la zone de J.
   - Problème ouvert : la correction de la rotation du décal est appliquée par Live Coding. Recompiler avec `Build.bat` à la prochaine fermeture de l'éditeur.
+- 2026-10-11 — 3.4 faite : menus complets (accueil avec Deck, écran de choix du deck enregistré en SaveGame, écran de fin avec Rejouer). **Phase 3 terminée**, avec les vérifications à la main de 3.3 et ci-dessous encore à faire.
+  - Le module a été recompilé par `Build.bat` (deux fois) : le problème ouvert de 3.3 (rotation du décal par Live Coding) est réglé.
+  - Cartes et deck :
+    - les cartes du jeu sont les Data Assets `ArenaCardData` que l'Asset Manager trouve dans `/Game/Arene/Cartes` (nouvelle règle `PrimaryAssetTypesToScan` dans `DefaultGame.ini`, cuisson `AlwaysCook`). Une carte ajoutée en phase 5 apparaîtra d'elle-même dans l'écran du deck et dans le jeu packagé ;
+    - nouveau `ArenaDeck` (fonctions sans classe, comme `ArenaLevel`) : cartes triées par coût puis par nom, vérification d'un deck (8 cartes différentes, toutes du jeu), coût moyen, et SaveGame `UArenaDeckSaveGame` (`Saved/SaveGames/Deck.sav`, une carte = son identifiant de l'Asset Manager) ;
+    - le deck part avec le joueur dans l'URL de connexion : `Arene?Deck=DA_Carte_Ecuyer,…` en solo, `Arene?listen?Deck=…` pour l'hôte, `<adresse>?Deck=…` pour le client (le moteur transmet ces options dans la demande de connexion). Le serveur le lit dans `AArenaGameMode::InitNewPlayer`, donc avant le début de la partie, et le revérifie : un deck refusé est remplacé par le deck par défaut. Les noms venant du client sont cherchés avec `FNAME_Find`, qui ne crée pas de nom ;
+    - le deck par défaut passe du GameMode à `BP_ArenaGameInstance`, nouveau Blueprint enfant de `UArenaGameInstance` réglé comme `GameInstanceClass` (`DefaultDeck` = les 8 cartes). Il sert au joueur sans deck enregistré et à l'IA. `DefaultDeck` est retiré d'`AArenaGameMode`.
+  - Écran du deck (`UArenaDeckWidget`, `WBP_Deck`, placé dans `WBP_MenuPrincipal`) :
+    - toutes les cartes, en `WBP_Carte` créées par le C++ et rendues cliquables par un délégué ajouté à `UArenaCardWidget` ;
+    - un clic ajoute ou retire la carte. Les cartes du deck sont relevées avec le cadre doré ; quand le deck est complet, les autres sont grisées ;
+    - compteur « 8 / 8 cartes · coût moyen 3,6 », « Enregistrer » actif à 8 cartes seulement, « Retour » ou Échap referment sans rien changer.
+  - Menu d'accueil : bouton « Deck » entre Rejoindre et Quitter. Le panneau du menu (`MenuSize`, renommé `MainPanel`) est masqué pendant le choix du deck, puis « Deck enregistré » s'affiche au retour.
+  - Écran de fin (`UArenaEndScreenWidget`, `WBP_FinPartie`, placé dans `WBP_HUD` par-dessus le reste) :
+    - 1,5 s après la fin (le temps de voir tomber le dernier bâtiment) : « Victoire ! », « Défaite » ou « Match nul », couronnes des deux camps du point de vue du joueur, boutons « Rejouer » et « Menu principal » ;
+    - il remplace le bandeau dessiné par `AArenaHUD`, gardé seulement sans `WBP_HUD`.
+  - Rejouer = revanche sur place, dans la même carte. Il n'y a ni ServerTravel ni reconnexion : cela marche de la même façon en PIE, en réseau local et par Steam.
+    - Chaque joueur la demande (`ServerRequestRematch`). `bWantsRematch` est répliqué à tous dans le PlayerState : « Votre adversaire veut une revanche ! », « En attente de la réponse de votre adversaire… » ;
+    - quand tous les joueurs présents l'ont demandée, `AArenaGameMode::RestartMatch` retire unités, projectiles et sorts en attente et reconstruit les 6 bâtiments (chaque machine réaffiche leurs meshes intacts). Il remet couronnes, cartes et élixir à zéro, puis relance la partie. L'IA du solo est gardée ;
+    - si l'adversaire quitte l'écran de fin, l'hôte le voit, et « Rejouer » rouvre la partie pour un nouvel adversaire : elle réapparaît dans les listes.
+  - Hors de la partie (attente, écran de fin), la carte choisie est rendue : plus de disque ni de zone surlignée sous l'écran de fin.
+  - Outil de test : `Arene.FinPartie [J|A|N] [couronnes J] [couronnes A]` termine tout de suite la partie en cours (sur le serveur ; en PIE, la console vise l'hôte).
+  - Vérifié en PIE :
+    - menu (Standalone) : les 8 cartes triées par coût, retrait puis ajout, « Enregistrer » grisé à 6/8, `Deck.sav` écrit, Échap. Solo : le serveur reçoit le deck ;
+    - solo : « Victoire ! » 2-1, puis revanche (tours abîmées remises à 1 400 PV, chrono et couronnes à zéro, nouvelle main, IA non dupliquée), « Défaite » 0-3, et « Menu principal » ramène au menu ;
+    - réseau, 2 instances depuis le menu (héberger, puis rejoindre par la liste) :
+      - les decks de l'hôte et du client sont reçus (`Login request: ?Deck=…`) ;
+      - « Victoire ! » chez l'hôte, « Défaite » 1-2 chez le client (vue retournée) ;
+      - demande du client, message chez l'hôte, puis revanche, et « Match nul » ;
+      - en mode démo, la tour de J en ruine chez le client redevient intacte à la revanche ;
+      - le client quitte l'écran de fin : message chez l'hôte, partie rouverte et de nouveau listée, le client la rejoint et la partie démarre ;
+    - aucun avertissement du jeu dans le log.
+  - Vérifié dans un jeu packagé (Development, `Saved/StagedBuilds/Windows`, hors dépôt) avec le `Deck.sav` de l'éditeur et `-ExecCmds="Arene.Heberger"` : le deck enregistré est relu (dans son ordre, pas celui du deck par défaut) et accepté par le serveur, sans avertissement. L'Asset Manager connaît donc les cartes cuites, et `BP_ArenaGameInstance` est bien chargé.
+  - Outillage :
+    - les propriétés répliquées du GameState (couronnes, heure de fin de phase) ne se modifient pas par ObjectTools, d'où `Arene.FinPartie` ;
+    - SlateInspector : `Windows` renvoie parfois une liste vide, mais les refs déjà connues restent utilisables. Les captures d'écran dépassent la taille d'une réponse : elles se décodent en PNG depuis le fichier de résultat ;
+    - réglages PIE remis comme au début de la session : Listen Server, 2 joueurs, arène ouverte.
+  - Problèmes ouverts :
+    - à vérifier à la main avec une vraie souris : clics dans l'écran du deck et sur « Rejouer » (en PIE, SlateInspector doit mettre la fenêtre au premier plan et survoler le bouton avant de cliquer) ;
+    - avec 8 cartes en tout, le seul deck possible contient les 8 : l'écran prendra son sens en phase 5 ;
+    - un disque de sort au sol (Mur de ronces, 4 s) peut rester visible quelques instants après le début de la revanche ;
+    - mode démo : les IA restent pour toutes les revanches de l'arène, même après `Arene.Demo 0`. Celle d'un joueur parti n'agit plus (correctif `IsValid` dans `AArenaAIOpponent::Think`, compilé dans le jeu packagé mais pas encore dans la DLL de l'éditeur : recompiler avec `Build.bat` à la prochaine fermeture).

@@ -109,6 +109,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Arene|Menu")
 	bool IsQuitPending() const;
 
+	// Bouton « Rejouer » de l'écran de fin : demande une revanche au serveur (voir AArenaGameMode::RequestRematch).
+	UFUNCTION(BlueprintCallable, Category = "Arene|Menu")
+	void RequestRematch();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -166,6 +170,9 @@ protected:
 	float QuitConfirmDelay = 3.f;
 
 private:
+	UFUNCTION(Server, Reliable)
+	void ServerRequestRematch();
+
 	// Touches de la pose de cartes (lues à chaque image).
 	void HandleCardInput();
 

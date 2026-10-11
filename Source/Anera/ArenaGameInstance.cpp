@@ -1,5 +1,7 @@
 #include "ArenaGameInstance.h"
 #include "Anera.h"
+#include "ArenaCardData.h"
+#include "ArenaDeck.h"
 #include "Engine/Engine.h"
 #include "Engine/NetDriver.h"
 #include "Engine/PendingNetGame.h"
@@ -28,6 +30,30 @@ void UArenaGameInstance::Init()
 	{
 		InviteAcceptedHandle = Sessions->OnInviteAccepted.AddUObject(this, &UArenaGameInstance::HandleInviteAccepted);
 	}
+	SavedDeck = ArenaDeck::LoadSavedDeck();
+	UE_CLOG(!ArenaDeck::IsValidDeck(GetDefaultDeck()), LogArene, Warning,
+		TEXT("%s : DefaultDeck doit contenir %d cartes differentes (a regler dans BP_ArenaGameInstance)."), *GetClass()->GetName(), ArenaDeck::DeckSize);
+}
+
+TArray<UArenaCardData*> UArenaGameInstance::GetDeck() const
+{
+	return SavedDeck.IsEmpty() ? GetDefaultDeck() : ObjectPtrDecay(SavedDeck);
+}
+
+bool UArenaGameInstance::SetDeck(const TArray<UArenaCardData*>& Cards)
+{
+	if (!ArenaDeck::SaveDeck(Cards))
+	{
+		return false;
+	}
+	SavedDeck = Cards;
+	UE_LOG(LogArene, Log, TEXT("Deck enregistre : %s"), *ArenaDeck::MakeDeckOption(Cards));
+	return true;
+}
+
+FString UArenaGameInstance::GetLoginOptions() const
+{
+	return ArenaDeck::MakeDeckOption(GetDeck());
 }
 
 void UArenaGameInstance::Shutdown()
@@ -49,7 +75,7 @@ UArenaSessionSubsystem* UArenaGameInstance::GetSessions() const
 void UArenaGameInstance::StartSolo()
 {
 	MenuMessage = FText::GetEmpty();
-	OpenMap(ArenaMap.GetLongPackageName(), FString());
+	OpenMap(ArenaMap.GetLongPackageName(), GetLoginOptions());
 }
 
 void UArenaGameInstance::HostGame()
@@ -73,7 +99,8 @@ void UArenaGameInstance::HostGame()
 		// Réseau local : sans annonce, la partie reste joignable par son adresse IP.
 		UE_CLOG(!bSuccess, LogArene, Warning, TEXT("%s La partie reste joignable par son adresse IP."), *Error.ToString());
 		// « listen » : la carte s'ouvre avec un serveur réseau qui accepte les connexions (port 7777 par défaut).
-		OpenMap(ArenaMap.GetLongPackageName(), TEXT("listen"));
+		const FString LoginOptions = GetLoginOptions();
+		OpenMap(ArenaMap.GetLongPackageName(), LoginOptions.IsEmpty() ? TEXT("listen") : TEXT("listen?") + LoginOptions);
 	}));
 }
 
@@ -155,8 +182,11 @@ void UArenaGameInstance::TravelToHost(const FString& Url, const FString& HostLab
 	MenuMessage = FText::GetEmpty();
 	PendingHostLabel = HostLabel;
 	UE_LOG(LogArene, Log, TEXT("Connexion a %s (%s)"), *HostLabel, *Url);
+	// Les options de l'URL (le deck) sont envoyées à l'hôte avec la demande de connexion.
+	const FString LoginOptions = GetLoginOptions();
+	const FString FullUrl = LoginOptions.IsEmpty() ? Url : Url + TEXT("?") + LoginOptions;
 	// Le voyage a lieu à l'image suivante : le moteur se connecte, puis charge la carte de l'hôte.
-	GEngine->SetClientTravel(GetWorld(), *Url, TRAVEL_Absolute);
+	GEngine->SetClientTravel(GetWorld(), *FullUrl, TRAVEL_Absolute);
 }
 
 void UArenaGameInstance::ReturnToMenu()

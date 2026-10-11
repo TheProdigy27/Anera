@@ -4,14 +4,18 @@
 #include "ArenaBuilding.h"
 #include "ArenaCardData.h"
 #include "ArenaCombat.h"
+#include "ArenaDeck.h"
+#include "ArenaGameInstance.h"
 #include "ArenaGameState.h"
 #include "ArenaHealthComponent.h"
 #include "ArenaHUD.h"
 #include "ArenaLevel.h"
 #include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
+#include "ArenaProjectile.h"
 #include "ArenaUnit.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -230,6 +234,30 @@ void AArenaGameMode::PostLogin(APlayerController* NewPlayer)
 	TryStartMatch();
 }
 
+FString AArenaGameMode::InitNewPlayer(APlayerController* NewPlayerController, const FUniqueNetIdRepl& UniqueId, const FString& Options,
+	const FString& Portal)
+{
+	const FString Error = Super::InitNewPlayer(NewPlayerController, UniqueId, Options, Portal);
+	AArenaPlayerState* NewState = NewPlayerController ? NewPlayerController->GetPlayerState<AArenaPlayerState>() : nullptr;
+	if (!Error.IsEmpty() || !NewState || !UGameplayStatics::HasOption(Options, TEXT("Deck")))
+	{
+		return Error;
+	}
+	// Le deck vient du joueur : il n'est accepté que s'il est jouable (8 cartes différentes, toutes du jeu).
+	const TArray<UArenaCardData*> Deck = ArenaDeck::ParseDeckOption(Options);
+	if (ArenaDeck::IsValidDeck(Deck))
+	{
+		NewState->SetChosenDeck(Deck);
+		UE_LOG(LogArene, Log, TEXT("Deck de %s recu"), *NewState->GetPlayerName());
+	}
+	else
+	{
+		UE_LOG(LogArene, Warning, TEXT("Deck de %s refuse (%s) : deck par defaut."), *NewState->GetPlayerName(),
+			*UGameplayStatics::ParseOption(Options, TEXT("Deck")).Left(300));
+	}
+	return Error;
+}
+
 void AArenaGameMode::Logout(AController* Exiting)
 {
 	const AArenaPlayerState* State = Exiting ? Exiting->GetPlayerState<AArenaPlayerState>() : nullptr;
@@ -246,6 +274,96 @@ void AArenaGameMode::Logout(AController* Exiting)
 			State->GetTeam() == EArenaTeam::J ? TEXT("J") : TEXT("A"));
 	}
 	Super::Logout(Exiting);
+
+	// Sur l'écran de fin, l'hôte qui attendait la réponse de l'adversaire parti n'attend plus que lui-même. Son
+	// PlayerState n'est retiré de la liste des joueurs qu'après Logout : on vérifie à l'image suivante.
+	if (ArenaGameState && ArenaGameState->GetMatchPhase() == EArenaMatchPhase::Ended && !bArenaClosing)
+	{
+		GetWorldTimerManager().SetTimerForNextTick(this, &AArenaGameMode::TryRestartMatch);
+	}
+}
+
+void AArenaGameMode::RequestRematch(AArenaPlayerState* Player)
+{
+	const AArenaGameState* ArenaGameState = GetArenaGameState();
+	if (!Player || Player->IsABot() || !ArenaGameState || ArenaGameState->GetMatchPhase() != EArenaMatchPhase::Ended || Player->WantsRematch())
+	{
+		return;
+	}
+	Player->SetWantsRematch(true);
+	UE_LOG(LogArene, Log, TEXT("%s demande une revanche"), *Player->GetPlayerName());
+	TryRestartMatch();
+}
+
+void AArenaGameMode::TryRestartMatch()
+{
+	const AArenaGameState* ArenaGameState = GetArenaGameState();
+	if (!ArenaGameState || ArenaGameState->GetMatchPhase() != EArenaMatchPhase::Ended)
+	{
+		return;
+	}
+	bool bAnyRequest = false;
+	for (const APlayerState* Player : GameState->PlayerArray)
+	{
+		const AArenaPlayerState* ArenaPlayer = Cast<AArenaPlayerState>(Player);
+		if (!ArenaPlayer || ArenaPlayer->IsABot() || ArenaPlayer->GetTeam() == EArenaTeam::None)
+		{
+			continue;
+		}
+		if (!ArenaPlayer->WantsRematch())
+		{
+			return;
+		}
+		bAnyRequest = true;
+	}
+	if (bAnyRequest)
+	{
+		RestartMatch();
+	}
+}
+
+void AArenaGameMode::RestartMatch()
+{
+	UE_LOG(LogArene, Log, TEXT("Revanche : remise a neuf de l'arene"));
+
+	// Sorts lancés juste avant la fin (minuteries de ResolveSpell) : le GameMode n'a pas d'autre minuterie.
+	GetWorldTimerManager().ClearAllTimersForObject(this);
+
+	// Les destructions sont répliquées : unités et projectiles disparaissent aussi chez les clients.
+	TArray<AActor*> Leftovers;
+	for (TActorIterator<AArenaUnit> It(GetWorld()); It; ++It)
+	{
+		Leftovers.Add(*It);
+	}
+	for (TActorIterator<AArenaProjectile> It(GetWorld()); It; ++It)
+	{
+		Leftovers.Add(*It);
+	}
+	// Bâtiments neufs : chacun affiche les acteurs importés de son état Intact, chez tous les joueurs.
+	for (AArenaBuilding* Building : Buildings)
+	{
+		Leftovers.Add(Building);
+	}
+	for (AActor* Actor : Leftovers)
+	{
+		if (IsValid(Actor))
+		{
+			Actor->Destroy();
+		}
+	}
+	Buildings.Reset();
+	SpawnBuildings();
+
+	for (APlayerState* Player : GameState->PlayerArray)
+	{
+		if (AArenaPlayerState* ArenaPlayer = Cast<AArenaPlayerState>(Player))
+		{
+			ArenaPlayer->ResetForNewMatch();
+		}
+	}
+	AbsentPlayers.Reset();
+	GetArenaGameState()->ResetMatch();
+	TryStartMatch();
 }
 
 void AArenaGameMode::Tick(float DeltaSeconds)
@@ -326,6 +444,45 @@ void AArenaGameMode::EndMatch(EArenaTeam Winner)
 	UE_LOG(LogArene, Log, TEXT("Fin de la partie : %s (couronnes J %d - A %d)"),
 		Winner == EArenaTeam::J ? TEXT("victoire de J") : Winner == EArenaTeam::A ? TEXT("victoire de A") : TEXT("match nul"),
 		ArenaGameState->GetCrowns(EArenaTeam::J), ArenaGameState->GetCrowns(EArenaTeam::A));
+}
+
+void AArenaGameMode::ForceEndMatch(EArenaTeam Winner, int32 CrownsJ, int32 CrownsA)
+{
+	AArenaGameState* ArenaGameState = GetArenaGameState();
+	if (!ArenaGameState || !ArenaGameState->IsMatchRunning())
+	{
+		UE_LOG(LogArene, Warning, TEXT("Arene.FinPartie : aucune partie en cours."));
+		return;
+	}
+	ArenaGameState->SetCrowns(EArenaTeam::J, FMath::Clamp(CrownsJ, 0, 3));
+	ArenaGameState->SetCrowns(EArenaTeam::A, FMath::Clamp(CrownsA, 0, 3));
+	EndMatch(Winner);
+}
+
+namespace
+{
+	// Commande de test : « Arene.FinPartie [J|A|N] [couronnes J] [couronnes A] » termine la partie en cours, sans attendre
+	// le chrono : victoire de J (par défaut), de A, ou match nul (N). Sur le serveur (en PIE, la console vise l'hôte).
+	void EndMatchFromConsole(const TArray<FString>& Args, UWorld* ConsoleWorld)
+	{
+		AArenaGameMode* GameMode = ConsoleWorld ? ConsoleWorld->GetAuthGameMode<AArenaGameMode>() : nullptr;
+		if (!GameMode)
+		{
+			UE_LOG(LogArene, Warning, TEXT("Arene.FinPartie : seulement sur le serveur, dans l'arene."));
+			return;
+		}
+		const FString WinnerArg = Args.IsValidIndex(0) ? Args[0].ToUpper() : TEXT("J");
+		const EArenaTeam Winner = WinnerArg == TEXT("A") ? EArenaTeam::A : WinnerArg == TEXT("N") ? EArenaTeam::None : EArenaTeam::J;
+		const int32 CrownsJ = Args.IsValidIndex(1) ? FCString::Atoi(*Args[1]) : (Winner == EArenaTeam::J ? 1 : 0);
+		const int32 CrownsA = Args.IsValidIndex(2) ? FCString::Atoi(*Args[2]) : (Winner == EArenaTeam::A ? 1 : 0);
+		UE_LOG(LogArene, Log, TEXT("Arene.FinPartie %s %d %d"), *WinnerArg, CrownsJ, CrownsA);
+		GameMode->ForceEndMatch(Winner, CrownsJ, CrownsA);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs EndMatchCommand(
+		TEXT("Arene.FinPartie"),
+		TEXT("Arene.FinPartie [J|A|N] [couronnes J] [couronnes A] : termine la partie en cours (victoire de J, de A, ou match nul) (test)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&EndMatchFromConsole));
 }
 
 EArenaTeam AArenaGameMode::GetTieBreakWinner() const
@@ -416,7 +573,11 @@ AArenaAIOpponent* AArenaGameMode::SpawnAIOpponent(EArenaTeam Team, AArenaPlayerS
 
 void AArenaGameMode::StartMatch()
 {
-	SpawnAIOpponents();
+	// À la revanche, les IA de la partie précédente sont toujours là.
+	if (AIOpponents.IsEmpty())
+	{
+		SpawnAIOpponents();
+	}
 
 	AArenaGameState* ArenaGameState = GetArenaGameState();
 	AbsentPlayers.Reset();
@@ -448,9 +609,10 @@ void AArenaGameMode::InitializePlayerForMatch(AArenaPlayerState* Player)
 
 	Player->InitializeElixir(StartElixir, MaxElixir);
 	const TArray<UArenaCardData*> Deck = GetDeckFor(Player);
-	if (Deck.Num() != 8)
+	if (Deck.Num() != ArenaDeck::DeckSize)
 	{
-		UE_LOG(LogArene, Warning, TEXT("Deck de %s : %d cartes au lieu de 8 (DefaultDeck du GameMode)."), *Player->GetPlayerName(), Deck.Num());
+		UE_LOG(LogArene, Warning, TEXT("Deck de %s : %d cartes au lieu de %d (DefaultDeck de BP_ArenaGameInstance)."), *Player->GetPlayerName(),
+			Deck.Num(), ArenaDeck::DeckSize);
 	}
 	Player->InitializeDeck(Deck, true);
 }
@@ -462,13 +624,19 @@ AArenaGameState* AArenaGameMode::GetArenaGameState() const
 
 TArray<UArenaCardData*> AArenaGameMode::GetDeckFor(const AArenaPlayerState* Player) const
 {
+	// Deck choisi par le joueur dans le menu, vérifié à son arrivée.
+	if (Player && !Player->GetChosenDeck().IsEmpty())
+	{
+		return Player->GetChosenDeck();
+	}
 	// Une IA peut avoir son propre deck (réglé dans son Blueprint).
 	const AArenaAIOpponent* Opponent = Player ? Cast<AArenaAIOpponent>(Player->GetOwner()) : nullptr;
 	if (Opponent && !Opponent->GetDeck().IsEmpty())
 	{
 		return Opponent->GetDeck();
 	}
-	return ObjectPtrDecay(DefaultDeck);
+	const UArenaGameInstance* GameInstance = GetGameInstance<UArenaGameInstance>();
+	return GameInstance ? GameInstance->GetDefaultDeck() : TArray<UArenaCardData*>();
 }
 
 bool AArenaGameMode::TryPlayCard(AArenaPlayerState* Player, UArenaCardData* Card, const FVector& Location)

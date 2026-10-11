@@ -69,6 +69,16 @@ void AArenaGameState::SetDoubleElixir(bool bEnabled)
 	bDoubleElixir = bEnabled;
 }
 
+void AArenaGameState::ResetMatch()
+{
+	check(HasAuthority());
+	CrownsJ = 0;
+	CrownsA = 0;
+	Winner = EArenaTeam::None;
+	bDoubleElixir = false;
+	SetMatchPhase(EArenaMatchPhase::Waiting, 0.f);
+}
+
 void AArenaGameState::PlayEffect(const FArenaEffect& Effect)
 {
 	check(HasAuthority());

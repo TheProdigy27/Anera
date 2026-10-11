@@ -1,6 +1,7 @@
 #include "ArenaHUDWidget.h"
 #include "ArenaCardData.h"
 #include "ArenaCardWidget.h"
+#include "ArenaEndScreenWidget.h"
 #include "ArenaGameInstance.h"
 #include "ArenaGameState.h"
 #include "ArenaPlayerController.h"
@@ -75,6 +76,7 @@ void UArenaHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		UpdateAlert(GameState, InDeltaTime);
 		UpdateMessages(Controller, GameState);
 	}
+	EndScreen->UpdateEndScreen(GameState, Player, InDeltaTime);
 }
 
 void UArenaHUDWidget::UpdateHand(const AArenaPlayerController* Controller, const AArenaPlayerState* Player)

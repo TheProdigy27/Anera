@@ -6,13 +6,18 @@
 #include "Engine/GameInstance.h"
 #include "ArenaGameInstance.generated.h"
 
+class UArenaCardData;
 class UNetDriver;
 
 // Instance du jeu : un seul objet, créé au lancement et gardé d'une carte à l'autre, alors que le GameMode
 // et le PlayerController sont recréés à chaque carte. Elle porte ce qui doit survivre au passage
-// menu → arène → menu : lancer une partie (solo, héberger, rejoindre), revenir au menu, et le message
-// d'erreur réseau que le menu affichera au retour (partie complète, hôte injoignable, hôte parti…).
-// L'annonce des parties en ligne (Steam ou réseau local) est confiée à UArenaSessionSubsystem.
+// menu → arène → menu : lancer une partie (solo, héberger, rejoindre), revenir au menu, le message
+// d'erreur réseau que le menu affichera au retour (partie complète, hôte injoignable, hôte parti…),
+// et le deck du joueur. L'annonce des parties en ligne (Steam ou réseau local) est confiée à UArenaSessionSubsystem.
+//
+// Le deck part avec le joueur à son entrée dans l'arène, dans les options de l'URL (« ?Deck=… », voir ArenaDeck) :
+// le serveur le reçoit dès la connexion, avant le début de la partie, et le revérifie.
+// Le deck par défaut (DefaultDeck) est réglé dans le Blueprint enfant BP_ArenaGameInstance.
 //
 // Config = Game : les UPROPERTY(Config) sont relues au lancement et enregistrées par SaveConfig()
 // dans Saved/Config/<plateforme>/Game.ini (ici, la dernière adresse saisie dans « Rejoindre »).
@@ -68,13 +73,32 @@ public:
 	// Port sur lequel ce monde accepte les joueurs, ou 0 s'il n'héberge pas de partie.
 	static int32 GetListenPort(UWorld* World);
 
+	// Deck du joueur pour ses prochaines parties : celui enregistré par l'écran « Deck » du menu, sinon le deck par défaut.
+	UFUNCTION(BlueprintPure, Category = "Arene|Cartes")
+	TArray<UArenaCardData*> GetDeck() const;
+
+	// Enregistre ce deck (SaveGame) pour les prochaines parties. Faux s'il n'est pas jouable ou si l'écriture échoue.
+	UFUNCTION(BlueprintCallable, Category = "Arene|Cartes")
+	bool SetDeck(const TArray<UArenaCardData*>& Cards);
+
+	// Deck d'un joueur qui n'a pas encore choisi le sien, et de l'IA du solo.
+	UFUNCTION(BlueprintPure, Category = "Arene|Cartes")
+	TArray<UArenaCardData*> GetDefaultDeck() const { return ObjectPtrDecay(DefaultDeck); }
+
 protected:
 	// Carte de l'arène, ouverte par Solo et Héberger. Le menu, lui, est la carte par défaut du jeu
 	// (Project Settings > Maps & Modes > Game Default Map) : c'est là que le moteur revient après une erreur réseau.
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Reseau")
 	TSoftObjectPtr<UWorld> ArenaMap;
 
+	// Deck par défaut : 8 cartes différentes (réglé dans BP_ArenaGameInstance).
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes")
+	TArray<TObjectPtr<UArenaCardData>> DefaultDeck;
+
 private:
+	// Options d'URL de ce joueur pour son entrée dans l'arène : son deck (« Deck=… »).
+	FString GetLoginOptions() const;
+
 	// Annule une connexion en cours puis ouvre la carte, avec ces options d'URL (« listen » pour héberger).
 	void OpenMap(const FString& MapPath, const FString& Options);
 
@@ -105,6 +129,10 @@ private:
 
 	UPROPERTY(Config)
 	FString LastJoinAddress;
+
+	// Deck enregistré, lu au lancement. Vide : le deck par défaut.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UArenaCardData>> SavedDeck;
 
 	// Hôte de la connexion en cours, pour les messages d'erreur.
 	FString PendingHostLabel;

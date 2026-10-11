@@ -65,6 +65,12 @@ void AArenaPlayerController::PlayerTick(float DeltaTime)
 	// PlayerTick ne tourne que sur la machine du joueur local : chacun gère sa propre caméra et sa prévisualisation.
 	UpdateArenaCamera();
 	UpdatePendingCardPlays();
+	// Hors du jeu (attente, écran de fin), aucune carte ne reste choisie : ni disque ni zone surlignée sous l'écran de fin.
+	const AArenaGameState* ArenaGameState = GetWorld()->GetGameState<AArenaGameState>();
+	if (SelectedHandSlot != INDEX_NONE && (!ArenaGameState || !ArenaGameState->IsMatchRunning()))
+	{
+		CancelCardSelection();
+	}
 	HandleCardInput();
 	UpdatePlacementPreview();
 	UpdateZoneHighlight();
@@ -300,6 +306,20 @@ void AArenaPlayerController::HandleEscape()
 bool AArenaPlayerController::IsQuitPending() const
 {
 	return GetWorld()->GetRealTimeSeconds() - QuitRequestTime <= QuitConfirmDelay;
+}
+
+void AArenaPlayerController::RequestRematch()
+{
+	// Chez l'hôte, la RPC s'exécute tout de suite ; chez un client, elle part au serveur.
+	ServerRequestRematch();
+}
+
+void AArenaPlayerController::ServerRequestRematch_Implementation()
+{
+	if (AArenaGameMode* GameMode = GetWorld()->GetAuthGameMode<AArenaGameMode>())
+	{
+		GameMode->RequestRematch(GetArenaPlayerState());
+	}
 }
 
 bool AArenaPlayerController::GetCardUnderCursor(UArenaCardData*& OutCard, FVector& OutCursorLocation) const

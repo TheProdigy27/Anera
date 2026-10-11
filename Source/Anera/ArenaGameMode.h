@@ -48,6 +48,10 @@ public:
 		const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 
+	// Appelée par Login avec les options de connexion du joueur : on y lit son deck (option « Deck », voir ArenaDeck).
+	virtual FString InitNewPlayer(APlayerController* NewPlayerController, const FUniqueNetIdRepl& UniqueId, const FString& Options,
+		const FString& Portal = TEXT("")) override;
+
 	// Un joueur qui quitte une partie en cours laisse sa place libre : élixir et cartes sont gardés pour son retour.
 	virtual void Logout(AController* Exiting) override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -56,7 +60,22 @@ public:
 	// ou directement par l'IA. Vérifie partie, main, élixir et zone, puis fait apparaître unités ou sort.
 	bool TryPlayCard(AArenaPlayerState* Player, UArenaCardData* Card, const FVector& Location);
 
+	// Écran de fin : ce joueur demande une revanche. Elle commence quand tous les joueurs présents l'ont demandée.
+	// Resté seul en réseau (l'adversaire est parti), l'hôte rouvre ainsi la partie pour un nouvel adversaire.
+	void RequestRematch(AArenaPlayerState* Player);
+
+	// Test (commande Arene.FinPartie) : termine tout de suite la partie en cours, avec ces couronnes et ce vainqueur.
+	void ForceEndMatch(EArenaTeam Winner, int32 CrownsJ, int32 CrownsA);
+
 protected:
+	// Lance la revanche si tous les joueurs humains présents l'ont demandée.
+	void TryRestartMatch();
+
+	// Remet l'arène à neuf sans changer de carte, donc sans couper les connexions : unités, projectiles et sorts
+	// en attente retirés, bâtiments reconstruits, couronnes et cartes remises à zéro. Puis la partie recommence,
+	// ou attend un adversaire.
+	void RestartMatch();
+
 	// Vrai quand 2 joueurs humains sont déjà là (les IA du solo, des robots, ne comptent pas).
 	bool IsFull() const;
 
@@ -101,12 +120,9 @@ protected:
 
 	AArenaGameState* GetArenaGameState() const;
 
-	// Deck d'un joueur au lancement de la partie.
+	// Deck d'un joueur au lancement de la partie : celui qu'il a choisi dans le menu, sinon celui de l'IA,
+	// sinon le deck par défaut (DefaultDeck de BP_ArenaGameInstance).
 	virtual TArray<UArenaCardData*> GetDeckFor(const AArenaPlayerState* Player) const;
-
-	// Deck de chaque joueur tant que l'écran de choix du deck (phase 3) n'existe pas. 8 cartes.
-	UPROPERTY(EditDefaultsOnly, Category = "Arene|Cartes")
-	TArray<TObjectPtr<UArenaCardData>> DefaultDeck;
 
 	// Durée du temps réglementaire.
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Partie", meta = (ClampMin = "1", Units = "s"))

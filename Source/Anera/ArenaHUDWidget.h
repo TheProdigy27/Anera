@@ -9,6 +9,7 @@ class AArenaGameState;
 class AArenaPlayerController;
 class AArenaPlayerState;
 class UArenaCardWidget;
+class UArenaEndScreenWidget;
 class UHorizontalBox;
 class UProgressBar;
 class UTextBlock;
@@ -17,7 +18,8 @@ class UTextBlock;
 // - main de 4 cartes et aperçu de la carte suivante, barre d'élixir segmentée ;
 // - chrono et couronnes des deux camps ;
 // - alertes au centre de l'écran : « Élixir ×2 ! » et « Prolongations ! » ;
-// - messages : attente d'un adversaire, adversaire déconnecté, second appui sur Échap pour quitter.
+// - messages : attente d'un adversaire, adversaire déconnecté, second appui sur Échap pour quitter ;
+// - écran de fin de partie (UArenaEndScreenWidget) : résultat, couronnes, Rejouer.
 //
 // Créée par AArenaHUD sur la machine de chaque joueur. Elle lit à chaque image l'état répliqué (GameState,
 // PlayerState) et le PlayerController local, sans rien modifier de la partie. Un widget n'est mis à jour que
@@ -102,6 +104,10 @@ protected:
 	// Rappel des commandes.
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> HelpText;
+
+	// Écran de fin de partie (WBP_FinPartie), par-dessus le reste.
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UArenaEndScreenWidget> EndScreen;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|HUD")
 	FLinearColor TeamJColor = FLinearColor(0.35f, 0.65f, 1.f);

@@ -9,18 +9,24 @@ class UBorder;
 class UImage;
 class UTextBlock;
 
-// Une carte affichée par le HUD : icône, nom et coût en élixir. Sert aux 4 cartes de la main et à l'aperçu de
-// la carte suivante. La mise en page est dans le Widget Blueprint WBP_Carte (enfant de cette classe).
+// Une carte affichée : icône, nom et coût en élixir. Sert aux 4 cartes de la main et à l'aperçu de la carte suivante
+// dans le HUD, et aux cartes de l'écran du deck. La mise en page est dans le Widget Blueprint WBP_Carte (enfant de cette classe).
 //
 // Une carte de la main se glisse sur le terrain, ou se choisit d'un clic comme avec les touches 1 à 4 (voir
 // AArenaPlayerController::BeginCardDrag). Le clic est consommé par l'interface : il n'arrive pas au PlayerController,
 // et ne pose donc pas la carte choisie avant.
+// Hors de la main, une carte ne se clique que si elle a un délégué OnClicked (écran du deck).
 UCLASS(Abstract)
 class ANERA_API UArenaCardWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
+	DECLARE_DELEGATE_OneParam(FOnCardClicked, UArenaCardWidget* /*CardWidget*/);
+
+	// Rend la carte cliquable hors de la main : un clic gauche appelle ce délégué.
+	void SetOnClicked(FOnCardClicked InOnClicked);
+
 	// Carte affichée. Null : emplacement vide, la carte est masquée.
 	void SetCard(UArenaCardData* InCard);
 
@@ -86,8 +92,13 @@ protected:
 private:
 	void ApplyState();
 
+	// Visible (reçoit les clics) pour une carte de la main ou cliquable ; sinon les clics passent au travers.
+	ESlateVisibility GetCardVisibility() const;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UArenaCardData> Card;
+
+	FOnCardClicked OnClicked;
 
 	int32 HandIndex = INDEX_NONE;
 	bool bSelected = false;
