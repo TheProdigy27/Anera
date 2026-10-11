@@ -7,7 +7,9 @@
 
 class AArenaBuilding;
 class UArenaAttackComponent;
+class UArenaHealthBarComponent;
 class UArenaHealthComponent;
+class UUserWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FArenaBuildingDestroyedSignature, AArenaBuilding*, Building);
 
@@ -87,6 +89,18 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Arene|Batiment")
 	TObjectPtr<UArenaAttackComponent> AttackComponent;
+
+	// Barre de PV, placée au-dessus du bâtiment intact une fois ses acteurs importés retrouvés.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Arene|Batiment")
+	TObjectPtr<UArenaHealthBarComponent> HealthBar;
+
+	// Widget de la barre de PV (WBP_BarrePV_Batiment, réglé dans BP_ArenaBuilding).
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Batiment")
+	TSubclassOf<UUserWidget> HealthBarWidgetClass;
+
+	// Hauteur de la barre de PV au-dessus du sommet du bâtiment intact.
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Batiment", meta = (Units = "cm"))
+	float HealthBarHeight = 40.f;
 
 	// Caractéristiques par type de bâtiment (voir PLAN.md, 1.3).
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Batiment|Tour", meta = (ClampMin = "1"))

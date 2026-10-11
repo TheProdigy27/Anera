@@ -113,7 +113,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 ## Phase 3 — Interface (UMG)
 
 - [x] **3.1 HUD de partie** (`WBP_HUD`) : barre d'élixir segmentée, 4 cartes (icône, coût, grisée si l'élixir manque) et la suivante en aperçu, chrono, couronnes des deux camps, alerte « ×2 élixir » et « Prolongations ».
-- [ ] **3.2 Barres de PV** au-dessus des bâtiments et des unités (WidgetComponent en espace écran), couleur de l'équipe.
+- [x] **3.2 Barres de PV** au-dessus des bâtiments et des unités (WidgetComponent en espace écran), couleur de l'équipe.
 - [ ] **3.3 Glisser-déposer** des cartes depuis le HUD vers le terrain, avec la zone de déploiement surlignée pendant le glisser.
 - [ ] **3.4 Menus** : accueil (Solo contre IA, Héberger, Rejoindre, Deck, Quitter), écran de choix du deck (8 cartes parmi celles disponibles, sauvegardé en `SaveGame`), écran de fin (victoire ou défaite, couronnes, Rejouer).
 
@@ -455,3 +455,26 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - les dernières corrections (texte de l'alerte, main masquée avant la distribution, couleurs des cartes par défaut dans l'en-tête) sont appliquées par Live Coding : recompiler avec `Build.bat` à la prochaine fermeture de l'éditeur ;
     - pas d'icônes de cartes : le nom les remplace, en attendant les modèles (phase 4) ou des images provisoires ;
     - sur un écran moins large que le 16:9 (4:3, 16:10, fenêtre de l'éditeur), le panneau de la main déborde un peu sur le rempart droit. Si c'est gênant : cartes plus petites, ou marge droite de la caméra (`ScreenMarginRight`).
+- 2026-10-11 — 3.2 faite : barres de PV au-dessus des bâtiments et des unités, à la couleur du camp (J bleu, A rouge).
+  - Nouvelles classes C++ :
+    - `UArenaHealthBarWidget` : la barre et les PV en chiffres, ces derniers facultatifs ;
+    - `UArenaHealthBarComponent` : un `WidgetComponent` en espace écran, qui garde la même taille à l'écran et reste face au joueur, caméra du camp A comprise. Il suit le composant de vie par `OnHealthChanged`, aussi chez les clients.
+  - Assets :
+    - `WBP_BarrePV_Unite` (barre de 52 × 7) et `WBP_BarrePV_Batiment` (PV en chiffres sur une barre de 110 × 12), dans `/Game/Arene/Interface` ;
+    - `HealthBarWidgetClass` réglé dans `BP_ArenaUnit` et `BP_ArenaBuilding`.
+  - Placement :
+    - unités : 85 uu au-dessus du centre du cylindre, sur le `Mesh`, pour suivre comme lui le lissage réseau chez les clients ;
+    - bâtiments : au-dessus du toit du bâtiment intact (`HealthBarHeight`, 40 uu), barre cachée en ruine.
+  - Réglage `bHideWhenFull` sur le composant, faux par défaut : il cache la barre tant que les PV sont pleins, si l'écran devient trop chargé.
+  - Détail du moteur : la couche écran réaffiche son conteneur à chaque image, quelle que soit la visibilité du composant. Pour cacher la barre, c'est le widget lui-même qui est masqué.
+  - Les anciennes étiquettes de texte (nom et PV) ne s'affichent plus qu'avec `Arene.HUDDebug 1`.
+  - Vérifié en PIE, en Listen Server à 2 joueurs et en mode démo :
+    - barres des 6 bâtiments à leurs PV et à la couleur de leur camp. Elles baissent sous les coups, chez l'hôte comme chez le client (vue retournée) ;
+    - barres des unités des deux camps ;
+    - barre retirée à la destruction de la tour droite de A, et barre du fort réveillé ;
+    - aucun avertissement du jeu dans le log.
+  - Le module a été recompilé par `Build.bat` : la DLL contient aussi les corrections de 3.1 faites par Live Coding (problème ouvert de 3.1 réglé).
+  - Incident : `QUIT_EDITOR` envoyé depuis un script `execute_tool_script` a bloqué l'éditeur en pleine fermeture, l'appel MCP en cours attendant l'éditeur. Le processus gardait le port MCP 8000 et a dû être arrêté à la main.
+    - **Envoyer `QUIT_EDITOR` par des appels directs** : SlateInspector `Click`, puis `Type`.
+    - L'éditeur arrêté de force n'a pas enregistré ses réglages du PIE : `PlayNumberOfClients` était revenu à 1, il est remis à 2.
+  - Outillage : `StartPIE` échoue (« Timed out waiting for PIE to start ») avec un préchauffage de 30 s, alors que le PIE démarre bien. Rester sous 25 s.

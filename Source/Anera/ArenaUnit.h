@@ -7,7 +7,9 @@
 
 class UArenaAttackComponent;
 class UArenaCardData;
+class UArenaHealthBarComponent;
 class UArenaHealthComponent;
+class UUserWidget;
 class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
 
@@ -68,6 +70,14 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Arene|Unite")
 	TObjectPtr<UArenaAttackComponent> AttackComponent;
+
+	// Barre de PV au-dessus de l'unité. Attachée au visuel, elle suit comme lui le lissage réseau chez les clients.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Arene|Unite")
+	TObjectPtr<UArenaHealthBarComponent> HealthBar;
+
+	// Widget de la barre de PV (WBP_BarrePV_Unite, réglé dans BP_ArenaUnit).
+	UPROPERTY(EditDefaultsOnly, Category = "Arene|Unite")
+	TSubclassOf<UUserWidget> HealthBarWidgetClass;
 
 	// Altitude des unités volantes au-dessus du sol.
 	UPROPERTY(EditDefaultsOnly, Category = "Arene|Unite", meta = (ClampMin = "0", Units = "cm"))

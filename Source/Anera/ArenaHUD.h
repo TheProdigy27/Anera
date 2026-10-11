@@ -8,10 +8,10 @@ class UArenaHUDWidget;
 
 // HUD du joueur. Un AHUD existe sur la machine de chaque joueur et dessine directement sur l'écran (Canvas) à chaque image.
 // - Il affiche l'interface de la partie (HUDWidgetClass, c'est-à-dire WBP_HUD) : cartes, élixir, chrono, couronnes.
-// - Il dessine encore, en attendant la suite de la phase 3 : une étiquette (nom, PV) au-dessus de chaque unité et
-//   bâtiment (remplacée par les barres de PV en 3.2), et le bandeau de fin de partie (remplacé par l'écran de fin en 3.4).
-// - Panneau de débogage (phase, chrono, élixir, main, PV des bâtiments) : variable de console « Arene.HUDDebug 1 ».
-//   Il s'affiche aussi si HUDWidgetClass n'est pas réglée.
+// - Il dessine encore le bandeau de fin de partie, en attendant l'écran de fin (3.4).
+// - Débogage, avec la variable de console « Arene.HUDDebug 1 » (ou si HUDWidgetClass n'est pas réglée) : panneau
+//   de texte (phase, chrono, élixir, main, PV des bâtiments) et étiquette (nom, PV) au-dessus de chaque unité et bâtiment.
+//   Les barres de PV elles-mêmes sont des UArenaHealthBarComponent, sur les unités et les bâtiments.
 UCLASS()
 class ANERA_API AArenaHUD : public AHUD
 {

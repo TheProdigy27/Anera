@@ -3,6 +3,7 @@
 #include "ArenaAttackComponent.h"
 #include "ArenaCombat.h"
 #include "ArenaGameState.h"
+#include "ArenaHealthBarComponent.h"
 #include "ArenaHealthComponent.h"
 #include "ArenaLevel.h"
 #include "ArenaProjectile.h"
@@ -27,6 +28,8 @@ AArenaBuilding::AArenaBuilding()
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Racine"));
 	HealthComponent = CreateDefaultSubobject<UArenaHealthComponent>(TEXT("Vie"));
 	AttackComponent = CreateDefaultSubobject<UArenaAttackComponent>(TEXT("Attaque"));
+	HealthBar = CreateDefaultSubobject<UArenaHealthBarComponent>(TEXT("BarrePV"));
+	HealthBar->SetupAttachment(RootComponent);
 
 	TowerAttack.Damage = 50.f;
 	TowerAttack.Interval = 0.8f;
@@ -57,6 +60,8 @@ void AArenaBuilding::InitializeBuilding(FName InGroup, EArenaBuildingType InType
 
 void AArenaBuilding::BeginPlay()
 {
+	// Avant Super::BeginPlay, qui démarre les composants : la barre crée son widget avec cette classe.
+	HealthBar->SetWidgetClass(HealthBarWidgetClass);
 	Super::BeginPlay();
 
 	GatherLevelActors();
@@ -152,6 +157,10 @@ void AArenaBuilding::GatherLevelActors()
 	{
 		AimPoint = GetActorLocation() + FVector(0.f, 0.f, 150.f);
 	}
+
+	// Barre de PV au-dessus du toit du bâtiment intact, à la verticale de son centre.
+	const float BarZ = MeshBounds.IsValid ? MeshBounds.Max.Z + HealthBarHeight : AimPoint.Z + 250.f;
+	HealthBar->SetWorldLocation(FVector(AimPoint.X, AimPoint.Y, BarZ));
 	bGathered = true;
 }
 

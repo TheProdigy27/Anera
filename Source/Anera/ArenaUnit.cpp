@@ -1,6 +1,7 @@
 #include "ArenaUnit.h"
 #include "ArenaAttackComponent.h"
 #include "ArenaCardData.h"
+#include "ArenaHealthBarComponent.h"
 #include "ArenaHealthComponent.h"
 #include "ArenaUnitAIController.h"
 #include "Components/CapsuleComponent.h"
@@ -37,6 +38,11 @@ AArenaUnit::AArenaUnit()
 
 	HealthComponent = CreateDefaultSubobject<UArenaHealthComponent>(TEXT("Vie"));
 	AttackComponent = CreateDefaultSubobject<UArenaAttackComponent>(TEXT("Attaque"));
+
+	// Barre de PV juste au-dessus du cylindre (120 de haut, centré sur le Mesh).
+	HealthBar = CreateDefaultSubobject<UArenaHealthBarComponent>(TEXT("BarrePV"));
+	HealthBar->SetupAttachment(GetMesh());
+	HealthBar->SetRelativeLocation(FVector(0.f, 0.f, 85.f));
 
 	// Sur le serveur, chaque unité qui apparaît reçoit automatiquement son contrôleur IA.
 	AIControllerClass = AArenaUnitAIController::StaticClass();
@@ -139,6 +145,8 @@ void AArenaUnit::UpdateMoveSpeed()
 
 void AArenaUnit::BeginPlay()
 {
+	// Avant Super::BeginPlay, qui démarre les composants : la barre crée son widget avec cette classe.
+	HealthBar->SetWidgetClass(HealthBarWidgetClass);
 	Super::BeginPlay();
 	UpdateTeamColor();
 

@@ -19,7 +19,8 @@ namespace
 	TAutoConsoleVariable<bool> CVarHUDDebug(
 		TEXT("Arene.HUDDebug"),
 		false,
-		TEXT("1 : affiche le panneau de débogage du HUD (phase, chrono, élixir, main, PV des bâtiments) en plus de l'interface."));
+		TEXT("1 : affiche en plus de l'interface le panneau de débogage du HUD (phase, chrono, élixir, main, PV des bâtiments) ")
+		TEXT("et une étiquette (nom, PV) au-dessus de chaque unité et bâtiment."));
 
 	FString FormatTime(float Seconds)
 	{
@@ -68,9 +69,9 @@ void AArenaHUD::DrawHUD()
 	}
 	// Texte un peu plus grand sur les grands écrans (référence : 720 pixels de haut).
 	const float Scale = FMath::Max(1.f, Canvas->ClipY / 720.f);
-	DrawWorldLabels(Scale);
 	if (!HUDWidget || CVarHUDDebug.GetValueOnGameThread())
 	{
+		DrawWorldLabels(Scale);
 		DrawDebugPanel(Scale);
 	}
 	DrawEndBanner(Scale);
