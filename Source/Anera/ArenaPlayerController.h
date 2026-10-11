@@ -39,7 +39,7 @@ struct FArenaPendingCardPlay
 // pour le camp A, puis se place pour que les zones de déploiement et les bâtiments tiennent dans
 // l'écran, quel que soit son format. Camera_Arene elle-même n'est jamais modifiée.
 //
-// Pose des cartes, en attendant l'interface (phase 3) : touches 1 à 4 pour choisir une carte de la main,
+// Pose des cartes : touches 1 à 4 ou clic sur une carte du HUD (UArenaCardWidget) pour choisir une carte de la main,
 // un disque suit la souris (vert : placement valide, rouge : refusé), clic gauche pour poser,
 // clic droit ou Échap pour annuler. Le placement est vérifié ici pour l'affichage, puis revérifié par le serveur.
 //

@@ -112,7 +112,7 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
 
 ## Phase 3 — Interface (UMG)
 
-- [ ] **3.1 HUD de partie** (`WBP_HUD`) : barre d'élixir segmentée, 4 cartes (icône, coût, grisée si l'élixir manque) et la suivante en aperçu, chrono, couronnes des deux camps, alerte « ×2 élixir » et « Prolongations ».
+- [x] **3.1 HUD de partie** (`WBP_HUD`) : barre d'élixir segmentée, 4 cartes (icône, coût, grisée si l'élixir manque) et la suivante en aperçu, chrono, couronnes des deux camps, alerte « ×2 élixir » et « Prolongations ».
 - [ ] **3.2 Barres de PV** au-dessus des bâtiments et des unités (WidgetComponent en espace écran), couleur de l'équipe.
 - [ ] **3.3 Glisser-déposer** des cartes depuis le HUD vers le terrain, avec la zone de déploiement surlignée pendant le glisser.
 - [ ] **3.4 Menus** : accueil (Solo contre IA, Héberger, Rejoindre, Deck, Quitter), écran de choix du deck (8 cartes parmi celles disponibles, sauvegardé en `SaveGame`), écran de fin (victoire ou défaite, couronnes, Rejouer).
@@ -402,3 +402,56 @@ Unités volantes : pas de NavMesh, déplacement direct (`FloatingPawnMovement`) 
     - le Colosse de pierre et le Bélier ont pour cible « Bâtiments uniquement » (tableau 1.3) : ils ignorent toutes les unités, donc deux d'entre eux se croisent sans se toucher ;
     - une unité garde la cible qu'elle frappe, bâtiment compris, jusqu'à sa destruction, même si un ennemi l'attaque (`AArenaUnitAIController::SelectTarget`).
   - À trancher pendant l'équilibrage (phase 5) : garder ces règles, ou faire riposter les unités attaquées.
+- 2026-10-11 — 3.1 faite : HUD de partie en UMG (`WBP_HUD`), qui remplace le texte de débogage.
+  - Nouvelles classes C++ :
+    - `UArenaHUDWidget` (parent de `WBP_HUD`) : lit à chaque image le GameState, le PlayerState et le PlayerController local, sans rien modifier de la partie. Un widget n'est mis à jour que si sa valeur change ;
+    - `UArenaCardWidget` (parent de `WBP_Carte`) : une carte, utilisée pour la main et pour l'aperçu de la carte suivante.
+  - Assets :
+    - `WBP_HUD` et `WBP_Carte` (`/Game/Arene/Interface`) ;
+    - `BP_ArenaHUD` (`/Game/Arene/Blueprints`), dont `HUDWidgetClass` = `WBP_HUD` ;
+    - `BP_ArenaGameMode` : `HUDClass` = `BP_ArenaHUD`.
+  - Disposition : en 16:9, l'arène cadrée par la caméra laisse de larges bandes de forêt de chaque côté. L'interface s'y place sans couvrir le terrain :
+    - en bas à droite, la main, la carte suivante et l'élixir ;
+    - en haut à droite, le chrono et les couronnes ;
+    - en haut à gauche, les messages ;
+    - en bas à gauche, l'aide ;
+    - au centre, les alertes.
+  - Contenu :
+    - cartes :
+      - coût, nom, touche (1 à 4) et fond coloré selon le type (bleu : unité, bordeaux : sort) ;
+      - l'icône s'affiche si la carte en a une, ce qui n'est encore le cas d'aucune ;
+      - grisée si l'élixir manque, estompée si elle est envoyée au serveur, relevée avec un cadre doré si elle est choisie ;
+    - un clic sur une carte la choisit, comme sa touche. Le clic s'arrête à l'interface et ne pose pas la carte choisie avant. Partout ailleurs, les clics vont au jeu ;
+    - élixir :
+      - barre de 10 segments, avec l'élixir disponible en chiffre (`GetAvailableElixir`, cartes en attente déduites) ;
+      - chez un client, l'élixir arrive 10 fois par seconde : la montée est lissée, une dépense s'affiche tout de suite ;
+      - badge « ×2 » pendant l'élixir double ;
+    - chrono : rouge dans les 10 dernières secondes, jaune en prolongations, et « –:–– » en attente ;
+    - couronnes « Adversaire » et « Vous », à la couleur de chaque camp, du point de vue du joueur ;
+    - alertes « Élixir ×2 ! » et « Prolongations ! La prochaine couronne gagne » : 3 s puis fondu. Elles s'affichent au passage dans ces phases, pas à l'arrivée dans une partie qui y est déjà ;
+    - messages repris du texte de débogage : attente d'un adversaire (Steam, ou port et adresse locale), adversaire déconnecté, second appui sur Échap ;
+    - la main et l'élixir sont masqués jusqu'à la distribution des cartes, au début de la partie.
+  - `AArenaHUD` crée le widget pour le joueur local :
+    - l'ancien panneau de texte ne s'affiche plus qu'avec `Arene.HUDDebug 1`, ou si `HUDWidgetClass` n'est pas réglée ;
+    - restent dessinés jusqu'à leur remplacement : les étiquettes de PV au-dessus des unités et des bâtiments (3.2), et le bandeau de fin (3.4).
+  - Vérifié en PIE, en Listen Server à 2 joueurs :
+    - un clic sur « Milice » la relève avec le cadre doré ;
+    - `Arene.PoseCarte` pose la carte : la carte suivante entre en main, une nouvelle carte suivante apparaît, et l'élixir passe de 10 à 8 puis remonte ;
+    - à 1:00, alerte « Élixir ×2 ! » et badge ×2. À 0-0 en fin de temps, alerte « Prolongations ! » et chrono jaune ;
+    - chez le client (camp A) : vue retournée, chrono synchronisé, couronnes aux couleurs inversées, sa propre main et son élixir ;
+    - hôte seul : message d'attente avec le port et l'adresse, main masquée ;
+    - aucun avertissement du jeu dans le log.
+  - Pas retestés : les messages « adversaire déconnecté » et « Appuyez encore sur Échap » (repris tels quels ; en PIE, Échap arrête la session).
+  - Outillage :
+    - compiler sans fermer l'éditeur, pour vérifier le code : cible jeu `Build.bat Anera Win64 Development`, qui ne touche pas aux DLL de l'éditeur (17 s) ;
+    - `QUIT_EDITOR` : cliquer d'abord dans la zone de texte de la console (SlateInspector `Click`), sinon `Type` échoue ;
+    - Widget Blueprints construits par MCP, un script `ProgrammaticToolset.execute_tool_script` par asset :
+      - `ObjectTools.set_properties` prend `values`, une chaîne JSON aux noms en camelCase ;
+      - les structures sont fusionnées : une police se règle avec `size` et `typefaceFontName` seuls ;
+      - les emplacements d'un `Overlay` sont alignés en haut à gauche par défaut : les mettre en `Fill` pour remplir ;
+      - `RenameWidget` prend `newDisplayName` ;
+      - les avertissements « association de widget requise … n'a pas été trouvée » pendant la construction viennent des compilations intermédiaires, et disparaissent quand tous les widgets liés existent.
+  - Problèmes ouverts :
+    - les dernières corrections (texte de l'alerte, main masquée avant la distribution, couleurs des cartes par défaut dans l'en-tête) sont appliquées par Live Coding : recompiler avec `Build.bat` à la prochaine fermeture de l'éditeur ;
+    - pas d'icônes de cartes : le nom les remplace, en attendant les modèles (phase 4) ou des images provisoires ;
+    - sur un écran moins large que le 16:9 (4:3, 16:10, fenêtre de l'éditeur), le panneau de la main déborde un peu sur le rempart droit. Si c'est gênant : cartes plus petites, ou marge droite de la caméra (`ScreenMarginRight`).

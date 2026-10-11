@@ -1,8 +1,9 @@
 #include "ArenaHUD.h"
+#include "Anera.h"
 #include "ArenaBuilding.h"
 #include "ArenaCardData.h"
-#include "ArenaGameInstance.h"
 #include "ArenaGameState.h"
+#include "ArenaHUDWidget.h"
 #include "ArenaHealthComponent.h"
 #include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
@@ -11,9 +12,15 @@
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "EngineUtils.h"
+#include "HAL/IConsoleManager.h"
 
 namespace
 {
+	TAutoConsoleVariable<bool> CVarHUDDebug(
+		TEXT("Arene.HUDDebug"),
+		false,
+		TEXT("1 : affiche le panneau de débogage du HUD (phase, chrono, élixir, main, PV des bâtiments) en plus de l'interface."));
+
 	FString FormatTime(float Seconds)
 	{
 		const int32 Total = FMath::CeilToInt(FMath::Max(0.f, Seconds));
@@ -31,6 +38,27 @@ namespace
 	}
 }
 
+void AArenaHUD::BeginPlay()
+{
+	Super::BeginPlay();
+	APlayerController* Controller = GetOwningPlayerController();
+	if (!Controller || !Controller->IsLocalController())
+	{
+		return;
+	}
+	if (!HUDWidgetClass)
+	{
+		UE_LOG(LogArene, Warning, TEXT("%s : HUDWidgetClass n'est pas reglee, seul le panneau de debogage est affiche."), *GetClass()->GetName());
+		return;
+	}
+	// CreateWidget fabrique le widget pour ce joueur ; AddToViewport l'affiche par-dessus la vue 3D.
+	HUDWidget = CreateWidget<UArenaHUDWidget>(Controller, HUDWidgetClass);
+	if (HUDWidget)
+	{
+		HUDWidget->AddToViewport();
+	}
+}
+
 void AArenaHUD::DrawHUD()
 {
 	Super::DrawHUD();
@@ -41,11 +69,14 @@ void AArenaHUD::DrawHUD()
 	// Texte un peu plus grand sur les grands écrans (référence : 720 pixels de haut).
 	const float Scale = FMath::Max(1.f, Canvas->ClipY / 720.f);
 	DrawWorldLabels(Scale);
-	DrawMatchPanel(Scale);
+	if (!HUDWidget || CVarHUDDebug.GetValueOnGameThread())
+	{
+		DrawDebugPanel(Scale);
+	}
 	DrawEndBanner(Scale);
 }
 
-void AArenaHUD::DrawMatchPanel(float Scale)
+void AArenaHUD::DrawDebugPanel(float Scale)
 {
 	const AArenaGameState* GameState = GetWorld()->GetGameState<AArenaGameState>();
 	const AArenaPlayerController* Controller = Cast<AArenaPlayerController>(GetOwningPlayerController());
@@ -62,35 +93,11 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 		Lines.Emplace(Text, Color);
 	};
 
-	// Hôte d'une partie annoncée sur Steam : l'adversaire la trouve par Steam, sans adresse ni port.
-	const UArenaSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UArenaSessionSubsystem>();
-	const bool bSteamHost = GetNetMode() == NM_ListenServer && Sessions && Sessions->IsUsingSteam() && Sessions->IsHostingSession();
-
 	// Phase et chrono.
 	switch (GameState->GetMatchPhase())
 	{
 	case EArenaMatchPhase::Waiting:
-		Line(TEXT("En attente d'un adversaire…"), FLinearColor::White);
-		if (bSteamHost)
-		{
-			Line(TEXT("Partie ouverte sur Steam : votre adversaire la choisit dans la liste du menu,"), FLinearColor::White);
-			Line(TEXT("ou passe par Steam (invitation, ou « Rejoindre la partie » dans la liste d'amis). Aucun port à ouvrir."), FLinearColor::Gray);
-		}
-		else if (GetNetMode() == NM_ListenServer)
-		{
-			// Ce qu'il faut à l'adversaire pour rejoindre, et à l'hôte pour régler sa box.
-			const int32 Port = UArenaGameInstance::GetListenPort(GetWorld());
-			if (LocalAddresses.IsEmpty())
-			{
-				// Lues une fois : interroger les cartes réseau à chaque image coûterait pour rien.
-				LocalAddresses = FString::Join(UArenaGameInstance::GetLocalAddresses(), TEXT(", "));
-				LocalAddresses = LocalAddresses.IsEmpty() ? TEXT("inconnue") : LocalAddresses;
-			}
-			Line(FString::Printf(TEXT("Partie ouverte sur le port %d (UDP)."), Port), FLinearColor::White);
-			Line(FString::Printf(TEXT("Adresse sur le réseau local : %s"), *LocalAddresses), FLinearColor::White);
-			Line(TEXT("Même réseau : l'adversaire entre cette adresse. Par Internet : votre adresse IP publique,"), FLinearColor::Gray);
-			Line(FString::Printf(TEXT("et la box doit rediriger le port %d (UDP) vers l'adresse locale ci-dessus."), Port), FLinearColor::Gray);
-		}
+		Line(TEXT("En attente d'un adversaire"), FLinearColor::White);
 		break;
 	case EArenaMatchPhase::InProgress:
 		Line(FString::Printf(TEXT("Temps : %s"), *FormatTime(GameState->GetRemainingTime())), FLinearColor::White);
@@ -108,25 +115,6 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 	}
 	Line(FString::Printf(TEXT("Couronnes : J %d - %d A"), GameState->GetCrowns(EArenaTeam::J), GameState->GetCrowns(EArenaTeam::A)), FLinearColor::White);
 
-	// En réseau, un camp sans joueur : l'adversaire s'est déconnecté et peut revenir.
-	if (GetNetMode() != NM_Standalone && GameState->IsMatchRunning())
-	{
-		int32 PlayersInTeams = 0;
-		for (const APlayerState* Other : GameState->PlayerArray)
-		{
-			const AArenaPlayerState* OtherArena = Cast<AArenaPlayerState>(Other);
-			PlayersInTeams += OtherArena && OtherArena->GetTeam() != EArenaTeam::None ? 1 : 0;
-		}
-		if (PlayersInTeams < 2)
-		{
-			Line(TEXT("Adversaire déconnecté : il peut revenir en rejoignant la partie."), FLinearColor::Yellow);
-		}
-	}
-	if (Controller && Controller->IsQuitPending())
-	{
-		Line(TEXT("Appuyez encore sur Échap pour quitter la partie."), FLinearColor::Yellow);
-	}
-
 	// Élixir et cartes du joueur local.
 	if (Player && Player->GetTeam() != EArenaTeam::None)
 	{
@@ -135,10 +123,7 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 
 		// Cartes envoyées au serveur comprises : leur coût est déjà déduit, en attendant sa réponse.
 		const float Elixir = Controller->GetAvailableElixir();
-		const int32 Max = FMath::RoundToInt(Player->GetMaxElixir());
-		const int32 Full = FMath::FloorToInt(Elixir);
-		const FString Bar = FString::ChrN(Full, TEXT('#')) + FString::ChrN(FMath::Max(0, Max - Full), TEXT('.'));
-		Line(FString::Printf(TEXT("Élixir : %.1f / %d  [%s]"), Elixir, Max, *Bar), FLinearColor(0.9f, 0.4f, 1.f));
+		Line(FString::Printf(TEXT("Élixir : %.2f / %.0f (serveur : %.2f)"), Elixir, Player->GetMaxElixir(), Player->GetElixir()), FLinearColor(0.9f, 0.4f, 1.f));
 
 		const TArray<UArenaCardData*> Hand = Player->GetHand();
 		for (int32 Index = 0; Index < Hand.Num(); ++Index)
@@ -159,9 +144,7 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 		{
 			Line(FString::Printf(TEXT("    Suivante : %s (%d)"), *Next->DisplayName.ToString(), Next->ElixirCost), FLinearColor::Gray);
 		}
-		Line(TEXT("Touches 1-4 (rangée du haut ou pavé numérique) : choisir, clic gauche : poser, clic droit : annuler"), FLinearColor::Gray);
 	}
-	Line(GameState->IsMatchRunning() ? TEXT("Échap (deux fois) : quitter la partie") : TEXT("Échap : retour au menu"), FLinearColor::Gray);
 
 	// PV des bâtiments.
 	Line(FString(), FLinearColor::White);
@@ -177,8 +160,9 @@ void AArenaHUD::DrawMatchPanel(float Scale)
 	UFont* Font = GEngine->GetMediumFont();
 	const float LineHeight = 20.f * Scale;
 	const float Padding = 8.f * Scale;
+	// Sous le cadre des messages de WBP_HUD, en haut à gauche.
 	const float X = 16.f * Scale;
-	float Y = 16.f * Scale;
+	float Y = Canvas->ClipY * 0.3f;
 	float MaxWidth = 0.f;
 	for (const TPair<FString, FLinearColor>& Entry : Lines)
 	{
